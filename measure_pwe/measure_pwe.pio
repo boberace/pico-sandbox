@@ -1,0 +1,33 @@
+.program measure_pwe
+; the code must be loaded at address 0, because it uses computed jumps
+.origin 0
+
+; added cycles so that there is 8 cycles between each decrement of y
+begin:
+    JMP sample          ; 0b00 (0) previous 0 current 0 - no pin change - go sample again
+    JMP rise          ; 0b01 (1) previous 0 current 1 - pin rise - turn on debug led - go update
+    JMP fall          ; 0b10 (2) previous 1 current 0 - pin fall - turn off debug led - go update
+    JMP sample          ; 0b11 (3) previous 1 current 1 - no pin change - go sample again
+
+rise:
+    jmp y--, continue_rise [2] ; decrement y, always go to next instruction, take [] more cycles to match sample cycles
+continue_rise:
+    MOV ISR, ~Y  ; copy Y scratch register negate into ISR, this is the tic increment value
+    PUSH noblock ; push contents of ISR to RX FIFO (clears ISR) for DMA to transfer, don't wait
+    set Y, 0     ; reset Y scratch register
+    jmp begin    ; go back to beginning
+
+fall:
+    jmp y--, continue_fall [3] ; decrement y, always go to next instruction, take [] more cycles to match sample cycles
+continue_fall:
+    MOV ISR, ~Y  ; copy Y scratch register negate into ISR, this is the tic increment value
+    PUSH noblock ; push contents of ISR to RX FIFO (clears ISR) for DMA to transfer, don't wait
+    jmp begin    ; go back to beginning 
+
+sample:
+    jmp y--, continue_sample [2] ; decrement y, always go to next instruction, take [] more cycles to match update cycles
+continue_sample:
+    OUT ISR, 1    ; shift previous state of input pin stored in OSR to ISR 
+    IN PINS, 1    ; shift in current state of input pin into ISR next to previous state of input pin    
+    MOV OSR, ISR  ; copy the ISR to OSR so that we can get the current value as previous value next cycle
+    MOV PC, ISR   ; jump to the computed address to update if pin change or sample again if no change
