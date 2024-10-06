@@ -108,4 +108,3 @@ void measure_pwm_program_init(PIO pio, uint sm, uint offset, uint pin) {
     pio_sm_init(pio, sm, offset, &c);
     pio_sm_set_enabled(pio, sm, true);
 }
-

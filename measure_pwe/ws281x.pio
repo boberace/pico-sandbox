@@ -32,4 +32,3 @@ do_one:
 do_zero:
     nop            side 0 [T2 - 1] ; Or drive low, for a short pulse
 .wrap
-

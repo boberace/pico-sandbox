@@ -8,7 +8,6 @@
 #include "hardware/timer.h"
 #include "hardware/clocks.h"
 #include "hardware/gpio.h"
-#include "hardware/pwm.h"
 #include "hardware/dma.h"
 #include "measure_pwe.pio.h"
 #include "ws281x.pio.h"
