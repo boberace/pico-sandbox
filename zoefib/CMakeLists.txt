@@ -35,7 +35,7 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(zoefib zoefib.c pid.c)
+add_executable(zoefib zoefib.c)
 
 pico_set_program_name(zoefib "zoefib")
 pico_set_program_version(zoefib "0.1")

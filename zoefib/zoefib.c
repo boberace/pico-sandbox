@@ -89,9 +89,9 @@ int main()
 
 
 
-    for(int i = 0; i < 7; i++){
-        set_motor_speed(i/10.0);
-        sleep_ms(500);
+    for(int i = 0; i < 70; i++){
+        set_motor_speed(i/100.0);
+        sleep_ms(100);
     }
 
     setup_pwm_strobe();
