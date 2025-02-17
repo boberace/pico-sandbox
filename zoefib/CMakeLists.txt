@@ -15,9 +15,9 @@ if(WIN32)
 else()
     set(USERHOME $ENV{HOME})
 endif()
-set(sdkVersion 2.0.0)
-set(toolchainVersion 13_2_Rel1)
-set(picotoolVersion 2.0.0)
+set(sdkVersion 2.1.0)
+set(toolchainVersion 13_3_Rel1)
+set(picotoolVersion 2.1.0)
 set(picoVscode ${USERHOME}/.pico-sdk/cmake/pico-vscode.cmake)
 if (EXISTS ${picoVscode})
     include(${picoVscode})
@@ -28,41 +28,40 @@ set(PICO_BOARD pico2 CACHE STRING "Board type")
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
 
-project(measure_pwm C CXX ASM)
+project(zoefib C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(measure_pwm measure_pwm.c )
+add_executable(zoefib zoefib.c pid.c)
 
-pico_set_program_name(measure_pwm "measure_pwm")
-pico_set_program_version(measure_pwm "0.1")
+pico_set_program_name(zoefib "zoefib")
+pico_set_program_version(zoefib "0.1")
 
 # Generate PIO header
-pico_generate_pio_header(measure_pwm ${CMAKE_CURRENT_LIST_DIR}/measure_pwm.pio)
+pico_generate_pio_header(zoefib ${CMAKE_CURRENT_LIST_DIR}/pin_tic_counter.pio)
 
 # Modify the below lines to enable/disable output over UART/USB
-pico_enable_stdio_uart(measure_pwm 1)
-pico_enable_stdio_usb(measure_pwm 0)
+pico_enable_stdio_uart(zoefib 1)
+pico_enable_stdio_usb(zoefib 0)
 
 # Add the standard library to the build
-target_link_libraries(measure_pwm
+target_link_libraries(zoefib
         pico_stdlib)
 
 # Add the standard include files to the build
-target_include_directories(measure_pwm PRIVATE
+target_include_directories(zoefib PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}
-  ${CMAKE_CURRENT_LIST_DIR}/.. # for our common lwipopts or any other standard includes, if required
 )
 
 # Add any user requested libraries
-target_link_libraries(measure_pwm 
-        hardware_dma
+target_link_libraries(zoefib 
         hardware_pio
+        pico_multicore
         hardware_pwm
         )
 
-pico_add_extra_outputs(measure_pwm)
+pico_add_extra_outputs(zoefib)
 
