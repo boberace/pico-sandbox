@@ -28,25 +28,40 @@ set(PICO_BOARD pico CACHE STRING "Board type")
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
 
-project(blink C CXX ASM)
+project(wavegen_r2r C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(blink
-    blink.c
-    )
+add_executable(wavegen_r2r wavegen_r2r.c )
 
-# pull in common dependencies
-target_link_libraries(blink pico_stdlib)
+pico_set_program_name(wavegen_r2r "wavegen_r2r")
+pico_set_program_version(wavegen_r2r "0.1")
 
-if (PICO_CYW43_SUPPORTED)
-    target_link_libraries(blink pico_cyw43_arch_none)
-endif()
+# Generate PIO headers
+pico_generate_pio_header(wavegen_r2r ${CMAKE_CURRENT_LIST_DIR}/blink.pio)
+pico_generate_pio_header(wavegen_r2r ${CMAKE_CURRENT_LIST_DIR}/r2r.pio)
 
-# create map/bin/hex file etc.
-pico_add_extra_outputs(blink)
+# Modify the below lines to enable/disable output over UART/USB
+pico_enable_stdio_uart(wavegen_r2r 0)
+pico_enable_stdio_usb(wavegen_r2r 1)
 
-# add url via pico_set_program_url
+# Add the standard library to the build
+target_link_libraries(wavegen_r2r
+        pico_stdlib)
+
+# Add the standard include files to the build
+target_include_directories(wavegen_r2r PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+)
+
+# Add any user requested libraries
+target_link_libraries(wavegen_r2r 
+        hardware_dma
+        hardware_pio
+        )
+
+pico_add_extra_outputs(wavegen_r2r)
+

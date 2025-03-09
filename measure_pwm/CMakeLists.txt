@@ -15,16 +15,16 @@ if(WIN32)
 else()
     set(USERHOME $ENV{HOME})
 endif()
-set(sdkVersion 2.0.0)
-set(toolchainVersion 13_2_Rel1)
-set(picotoolVersion 2.0.0)
+set(sdkVersion 2.1.1)
+set(toolchainVersion 14_2_Rel1)
+set(picotoolVersion 2.1.1)
 set(picoVscode ${USERHOME}/.pico-sdk/cmake/pico-vscode.cmake)
 if (EXISTS ${picoVscode})
     include(${picoVscode})
 endif()
 # ====================================================================================
-set(PICO_BOARD pico2 CACHE STRING "Board type")
-
+set(PICO_BOARD pico CACHE STRING "Board type")
+# add_compile_definitions(SYS_CLK_MHZ=200)
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
 
@@ -44,8 +44,8 @@ pico_set_program_version(measure_pwm "0.1")
 pico_generate_pio_header(measure_pwm ${CMAKE_CURRENT_LIST_DIR}/measure_pwm.pio)
 
 # Modify the below lines to enable/disable output over UART/USB
-pico_enable_stdio_uart(measure_pwm 1)
-pico_enable_stdio_usb(measure_pwm 0)
+pico_enable_stdio_uart(measure_pwm 0)
+pico_enable_stdio_usb(measure_pwm 1)
 
 # Add the standard library to the build
 target_link_libraries(measure_pwm

@@ -1,7 +1,6 @@
 /**
  * todo : create formula for enum dreq_num_rp2350 so any pio or state machine can be used
  */
-
 #include <stdio.h>
 #include "pico/stdlib.h"
 #include "hardware/pio.h"
@@ -12,10 +11,9 @@
 #include "hardware/dma.h"
 #include "measure_pwm.pio.h"
 
-
-#define PIN_CAPTURE 17
-#define PIN_PWM_A 20
-#define PIN_PWM_B 21
+#define PIN_CAPTURE 2
+#define PIN_PWM_A 0
+#define PIN_PWM_B 1
 
 // start DMA configuration
 // configure with bits so we can align the buffer
@@ -40,22 +38,25 @@ int main() {
 
     gpio_set_function(PIN_PWM_A, GPIO_FUNC_PWM);
     gpio_set_function(PIN_PWM_B, GPIO_FUNC_PWM);
-    uint16_t wrap = 20000;
+    uint16_t wrap = 1000000/110.0;
     uint slice_num = pwm_gpio_to_slice_num(PIN_PWM_A);
     pwm_set_wrap(slice_num, wrap);
-    pwm_set_chan_level(slice_num, PWM_CHAN_A, 2000);
-    pwm_set_chan_level(slice_num, PWM_CHAN_B, 5);
-    pwm_set_clkdiv_int_frac (slice_num, 125, 0); // microseconds
+    pwm_set_chan_level(slice_num, PWM_CHAN_A, wrap >> 1);
+    pwm_set_chan_level(slice_num, PWM_CHAN_B, wrap >> 1);
+    pwm_set_output_polarity(slice_num, false, true);
+    // pwm_set_clkdiv_int_frac (slice_num, 125, 0); // microseconds
+    pwm_set_clkdiv(slice_num, 125); // microseconds
     pwm_set_enabled(slice_num, true);   
     
     measure_pwm_forever(PIN_CAPTURE, pin_cap_buf);
 
     dma_channel_start(dma_data_cptr_chan); 
     sleep_ms(1000);
-
+    float clkhz = (float)clock_get_hz(clk_sys);
     while (1) {
 
         printf("--------------------\n");   
+        printf("clk_sys %f\n", clkhz);
 
         for(int i = 0; i < PIN_CAP_BUF_SIZE; i++) {
             printf("tics %8d\n", pin_cap_buf[i]);
@@ -102,7 +103,7 @@ void measure_pwm_program_init(PIO pio, uint sm, uint offset, uint pin) {
     // don't join FIFO's
     sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_NONE); 
     // set up to create microsecond tics
-    float div = (float)clock_get_hz(clk_sys) / 8 / 1000000; 
+    float div = (float)clock_get_hz(clk_sys) / 8 / 10000000; 
     sm_config_set_clkdiv(&c, div);
 
     pio_sm_init(pio, sm, offset, &c);
