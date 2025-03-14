@@ -41,7 +41,7 @@ pico_set_program_name(wavegen_r2r "wavegen_r2r")
 pico_set_program_version(wavegen_r2r "0.1")
 
 # Generate PIO headers
-pico_generate_pio_header(wavegen_r2r ${CMAKE_CURRENT_LIST_DIR}/blink.pio)
+pico_generate_pio_header(wavegen_r2r ${CMAKE_CURRENT_LIST_DIR}/quadrature_encoder.pio)
 pico_generate_pio_header(wavegen_r2r ${CMAKE_CURRENT_LIST_DIR}/r2r.pio)
 
 # Modify the below lines to enable/disable output over UART/USB
