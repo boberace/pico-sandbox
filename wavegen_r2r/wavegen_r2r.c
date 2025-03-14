@@ -1,12 +1,15 @@
-#include <stdio.h>
+#include "stdio.h"
 #include "pico/stdlib.h"
 #include "hardware/dma.h"
 #include "hardware/pio.h"
 #include "hardware/clocks.h"
 #include "hardware/gpio.h"
+#include "hardware/i2c.h"
 #include "math.h"
+#include "string.h"
 #include "quadrature_encoder.pio.h"
 #include "r2r.pio.h"
+#include "ssd1306.h"
 
 #define system_frequency clock_get_hz(clk_sys)
 
@@ -15,10 +18,16 @@ const uint PIN_BUT_ENC1 = 4;
 const uint PIN_BUT_ENC2 = 5;
 const uint PIN_AB_ENC2 = 6; // 7 also used
 
+#define PIN_I2C_SDA 8
+#define PIN_I2C_SCL 9
+
 #define R2R_BITS 6
 #define R2R_BASE_PIN 10 // 11-15 also used
 #define R2R_MAX ((1 << R2R_BITS) - 1)
 #define NUM_WAV_SAMPLES 125
+
+#define I2C0_BUADRATE 400*1000
+ssd1306_t disp; // create oled display instance
 
 static char event_str[128];
 
@@ -34,6 +43,8 @@ uint8_t fun_wave[NUM_WAV_SAMPLES];
 int dma_chan_wave_bytes;
 int dma_chan_wave_loop;
 
+uint count = 0;
+
 void gen_waves();
 void r2r_forever(PIO pio, uint sm, uint offset, uint base_pin, uint num_pins, float freq);
 void r2r_program_init(PIO pio, uint sm, uint offset, uint base_pin, uint num_pins, float freq);
@@ -44,6 +55,9 @@ static inline void quadrature_encoder_program_init(PIO pio, uint sm, uint pin, i
 static inline int32_t quadrature_encoder_get_count(PIO pio, uint sm);
 void gpio_event_string(char *buf, uint32_t events);
 void gpio_callback(uint gpio, uint32_t events);
+void setup_i2c0(void); 
+void setup_oled(void);
+void update_display(void);
 
 int main()
 {
@@ -81,32 +95,49 @@ int main()
     gpio_pull_up(PIN_BUT_ENC2);
     gpio_set_irq_enabled_with_callback(PIN_BUT_ENC2, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &gpio_callback);
 
-    uint count = 0;
-    while (true) {
-        count++;
-        sleep_ms(100);
+    setup_i2c0();
+    setup_oled();
 
-        new_value_enc1 = quadrature_encoder_get_count(pio_quadenc, sm_quadenc1);
-        delta_enc1 = new_value_enc1 - old_value_enc1;
-        old_value_enc1 = new_value_enc1;
 
-        new_value_enc2 = quadrature_encoder_get_count(pio_quadenc, sm_quadenc2);
-        delta_enc2 = new_value_enc2 - old_value_enc2;
-        old_value_enc2 = new_value_enc2;
 
-        if (new_value_enc1 != last_value_enc1 || delta_enc1 != last_delta_enc1 ) {
-            printf("enc1 position %8d, delta %6d\n", new_value_enc1, delta_enc1);
-            last_value_enc1 = new_value_enc1;
-            last_delta_enc1 = delta_enc1;
+    uint32_t prev_millis_display = to_ms_since_boot(get_absolute_time());
+    uint32_t curr_millis_display = to_ms_since_boot(get_absolute_time());
+
+    while(true){
+
+        sleep_ms(1);
+        // display
+        curr_millis_display = to_ms_since_boot(get_absolute_time());
+        if( curr_millis_display - prev_millis_display > 100){
+            prev_millis_display = curr_millis_display;
+
+            count++;                       
+    
+            new_value_enc1 = quadrature_encoder_get_count(pio_quadenc, sm_quadenc1);
+            delta_enc1 = new_value_enc1 - old_value_enc1;
+            old_value_enc1 = new_value_enc1;
+    
+            new_value_enc2 = quadrature_encoder_get_count(pio_quadenc, sm_quadenc2);
+            delta_enc2 = new_value_enc2 - old_value_enc2;
+            old_value_enc2 = new_value_enc2;
+    
+            if (new_value_enc1 != last_value_enc1 || delta_enc1 != last_delta_enc1 ) {
+                printf("enc1 position %8d, delta %6d\n", new_value_enc1, delta_enc1);
+                last_value_enc1 = new_value_enc1;
+                last_delta_enc1 = delta_enc1;
+            }
+    
+            if (new_value_enc2 != last_value_enc2 || delta_enc2 != last_delta_enc2 ) {
+                printf("enc2 position %8d, delta %6d\n", new_value_enc2, delta_enc2);
+                last_value_enc2 = new_value_enc2;
+                last_delta_enc2 = delta_enc2;
+            }
+
+            update_display(); 
         }
-
-        if (new_value_enc2 != last_value_enc2 || delta_enc2 != last_delta_enc2 ) {
-            printf("enc2 position %8d, delta %6d\n", new_value_enc2, delta_enc2);
-            last_value_enc2 = new_value_enc2;
-            last_delta_enc2 = delta_enc2;
-        }
-
     }
+
+
 }
 
 void gen_waves() 
@@ -277,4 +308,47 @@ void gpio_callback(uint gpio, uint32_t events)
     // so we can print it
     gpio_event_string(event_str, events);
     printf("GPIO %d %s\n", gpio, event_str);
+}
+
+void setup_i2c0(void)
+{
+
+    i2c_init(i2c0, I2C0_BUADRATE);
+    gpio_set_function(PIN_I2C_SDA, GPIO_FUNC_I2C);
+    gpio_set_function(PIN_I2C_SCL, GPIO_FUNC_I2C);
+    gpio_pull_up(PIN_I2C_SDA);
+    gpio_pull_up(PIN_I2C_SCL);
+}
+
+
+void setup_oled(void) 
+{
+
+    disp.external_vcc=false;
+    ssd1306_init(&disp, 128, 32, 0x3C, i2c0);
+    ssd1306_clear(&disp);
+    ssd1306_draw_string(&disp, 8, 0, 1, (char*)"SSD1306");
+    ssd1306_draw_string(&disp, 8, 16, 2, (char*)"DISPLAY");
+    ssd1306_show(&disp);
+}
+
+void update_display(void)
+{ 
+    
+    ssd1306_clear(&disp);
+
+    char str[128];
+
+    // ssd1306_draw_string(&disp, 0, 0, 3, note[note_idx]);
+
+    memset(str, 0, sizeof(char));
+    sprintf(str, " %d", count);
+    ssd1306_draw_string(&disp, 24, 0, 3, str);
+
+    // memset(str, 0, sizeof(char));
+    // sprintf(str, "%d, %d", midi_idx, midi_cent);
+    // ssd1306_draw_string(&disp, 0, 16, 2, str);
+
+    ssd1306_show(&disp);
+
 }

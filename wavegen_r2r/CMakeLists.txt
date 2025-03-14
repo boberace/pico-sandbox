@@ -35,7 +35,7 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(wavegen_r2r wavegen_r2r.c )
+add_executable(wavegen_r2r wavegen_r2r.c ssd1306.c )
 
 pico_set_program_name(wavegen_r2r "wavegen_r2r")
 pico_set_program_version(wavegen_r2r "0.1")
@@ -61,6 +61,7 @@ target_include_directories(wavegen_r2r PRIVATE
 target_link_libraries(wavegen_r2r 
         hardware_dma
         hardware_pio
+        hardware_i2c
         )
 
 pico_add_extra_outputs(wavegen_r2r)
