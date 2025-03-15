@@ -68,7 +68,8 @@ tone_t tones[num_tones];
 float con_pitch = 440.0; // A4 - 440Hz
 float freq_current = 440.0; // A4 - 440Hz
 uint8_t tone_current = tone_starting; // A4 - 440Hz
-float cent_offset = 0.0;
+int8_t cent_offset = 0;
+uint8_t intensity = 64;
 
 char* notes[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "Bb", "B"};
 
@@ -92,6 +93,9 @@ void setup_encoders(void);
 uint update_encoders(void);
 void setup_tones(void);
 void update_current_tone(void);
+void update_intensity(void);
+void update_cent_off(void);
+void update_frequency(void);
 // void change_fundamental(void);
 
 uint refresh_counter = 0;
@@ -106,6 +110,7 @@ int main()
     setup_encoders();
     setup_i2c0();
     setup_oled();
+    setup_tones();
 
     uint32_t prev_millis_display = to_ms_since_boot(get_absolute_time());
     uint32_t curr_millis_display = to_ms_since_boot(get_absolute_time());
@@ -123,14 +128,14 @@ int main()
             if(new_event){
                 if(new_event == 1){
                     update_current_tone();
-                    printf("tone_current: %d\n", tone_current);
                 }
                 if(new_event == 2){
-                    printf("new_position_enc2: %d\n", new_position_enc2);
+                    update_intensity(); 
                 }
                 if(new_event == 3){
-                    printf("new_position_enc3: %d\n", new_position_enc3);
+                    update_cent_off();
                 }
+                printf("tone_current: %d, freq_current %f hz, cent_offset %d\n", tone_current, freq_current, cent_offset);
             }
             update_display(); 
         }
@@ -220,9 +225,8 @@ void dma_handler_wave()
 
 void set_frequency(float freq) 
 {
-    pio_sm_set_clkdiv_int_frac(pio_r2r, sm_r2r, system_frequency/NUM_WAV_SAMPLES/freq, 0);
+    pio_sm_set_clkdiv(pio_r2r, sm_r2r, system_frequency/NUM_WAV_SAMPLES/freq);
 }   
-
 
 // max_step_rate is used to lower the clock of the state machine to save power
 // if the application doesn't require a very high sampling rate. Passing zero
@@ -440,14 +444,45 @@ void setup_tones(void)
 }
 void update_current_tone(void)
 {
-    uint dt = new_position_enc1 - old_position_enc1;
-    int new_tone = tone_current + dt;
+    uint de = new_position_enc1 - old_position_enc1;
+    int new_tone = tone_current + de;
     if (new_tone < tone_lowest) {
         new_tone = tone_highest;
     } else if (new_tone > tone_highest) {
         new_tone = tone_lowest;
     }
     tone_current = new_tone;
-    // set_frequency(tones[tone_current - tone_lowest].freq);
+    update_frequency();
 }
 
+void update_intensity(void)
+{
+    uint de = new_position_enc2 - old_position_enc2;
+    uint8_t new_intensity = intensity + de;
+    // if (new_intensity < 0) {
+    //     new_intensity = 0;
+    // } else if (new_intensity > 127) {
+    //     new_intensity = 127;
+    // }
+    intensity = new_intensity;
+}
+
+void update_cent_off(void)
+{
+    int de = (new_position_enc3 - old_position_enc3) ;
+    int tco = cent_offset + de;
+    if(tco < -50){
+        tco = 50;
+    } else if(tco > 50){
+        tco = -50;
+    }
+    cent_offset = tco;
+    update_frequency();
+
+}
+
+void update_frequency(void)
+{
+    freq_current = tones[tone_current - tone_lowest].freq*pow(2.0, cent_offset / 1200.0);
+    set_frequency(freq_current);
+}
