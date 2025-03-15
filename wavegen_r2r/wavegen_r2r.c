@@ -17,6 +17,8 @@ const uint PIN_AB_ENC1 = 2; // 3 also used
 const uint PIN_BUT_ENC1 = 4;
 const uint PIN_BUT_ENC2 = 5;
 const uint PIN_AB_ENC2 = 6; // 7 also used
+const uint PIN_AB_ENC3 = 20; // 21 also used
+const uint PIN_BUT_ENC3 = 22;
 
 #define PIN_I2C_SDA 8
 #define PIN_I2C_SCL 9
@@ -34,6 +36,14 @@ static char event_str[128];
 PIO pio_quadenc = pio0;
 uint sm_quadenc1 = 0;
 uint sm_quadenc2 = 1;
+uint sm_quadenc3 = 2;
+
+int new_value_enc1, delta_enc1, old_value_enc1 = 0, new_position_enc1 = 0, old_position_enc1 = 0;
+int last_value_enc1 = -1, last_delta_enc1 = -1;
+int new_value_enc2, delta_enc2, old_value_enc2 = 0, new_position_enc2 = 0, old_position_enc2 = 0;
+int last_value_enc2 = -1, last_delta_enc2 = -1;    
+int new_value_enc3, delta_enc3, old_value_enc3 = 0, new_position_enc3 = 0, old_position_enc3 = 0;
+int last_value_enc3 = -1, last_delta_enc3 = -1;    
 
 PIO pio_r2r = pio1;
 uint sm_r2r = 0;
@@ -42,12 +52,25 @@ uint8_t fun_wave[NUM_WAV_SAMPLES];
 
 int dma_chan_wave_bytes;
 int dma_chan_wave_loop;
+float con_pitch = 440.0;
+
+typedef struct {
+    uint8_t midi;
+    uint8_t note;
+    uint8_t octave;
+    float freq;
+} tone_t;
+
+tone_t tones[88];
 
 uint count = 0;
 
-void gen_waves();
-void r2r_forever(PIO pio, uint sm, uint offset, uint base_pin, uint num_pins, float freq);
+uint midi_to_note(uint midi){(midi + 3) % 12;}
+uint midi_to_octave(uint midi){midi/12.0-1;}
+
+void setup_waves();
 void r2r_program_init(PIO pio, uint sm, uint offset, uint base_pin, uint num_pins, float freq);
+void setup_r2r(void);
 void setup_dma_wave();
 void dma_handler_wave();
 void set_frequency(float freq);
@@ -58,47 +81,22 @@ void gpio_callback(uint gpio, uint32_t events);
 void setup_i2c0(void); 
 void setup_oled(void);
 void update_display(void);
+void setup_encoders(void);
+uint update_encoders(void);
+void setup_tones(void);
+// void change_fundamental(void);
 
 int main()
 {
     stdio_init_all();
     sleep_ms(1000);
 
-    int new_value_enc1, delta_enc1, old_value_enc1 = 0;
-    int last_value_enc1 = -1, last_delta_enc1 = -1;
-    int new_value_enc2, delta_enc2, old_value_enc2 = 0;
-    int last_value_enc2 = -1, last_delta_enc2 = -1;    
-
-    // we don't really need to keep the offset, as this program must be loaded
-    // at offset 0
-    pio_add_program(pio_quadenc, &quadrature_encoder_program);
-    quadrature_encoder_program_init(pio_quadenc, sm_quadenc1, PIN_AB_ENC1, 0);
-    quadrature_encoder_program_init(pio_quadenc, sm_quadenc2, PIN_AB_ENC2, 0);
-
-    gen_waves();    
-
-    uint offset_r2r = pio_add_program(pio_r2r, &r2r_program);
-    r2r_forever(pio_r2r, sm_r2r, offset_r2r, R2R_BASE_PIN, R2R_BITS, 1*440.0f);
-    printf("Loaded r2r program at %d\n", offset_r2r);  
-    
-    for (int i = 0; i < NUM_WAV_SAMPLES; i++) {
-        uint8_t value = fun_wave[i];  
-        printf("%d\n", value);  
-    }
-
+    setup_waves();  
+    setup_r2r();
     setup_dma_wave();
-
-    gpio_init(PIN_BUT_ENC1);
-    gpio_pull_up(PIN_BUT_ENC1);
-    gpio_set_irq_enabled_with_callback(PIN_BUT_ENC1, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &gpio_callback);
-    gpio_init(PIN_BUT_ENC2);
-    gpio_pull_up(PIN_BUT_ENC2);
-    gpio_set_irq_enabled_with_callback(PIN_BUT_ENC2, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &gpio_callback);
-
+    setup_encoders();
     setup_i2c0();
     setup_oled();
-
-
 
     uint32_t prev_millis_display = to_ms_since_boot(get_absolute_time());
     uint32_t curr_millis_display = to_ms_since_boot(get_absolute_time());
@@ -111,28 +109,19 @@ int main()
         if( curr_millis_display - prev_millis_display > 100){
             prev_millis_display = curr_millis_display;
 
-            count++;                       
-    
-            new_value_enc1 = quadrature_encoder_get_count(pio_quadenc, sm_quadenc1);
-            delta_enc1 = new_value_enc1 - old_value_enc1;
-            old_value_enc1 = new_value_enc1;
-    
-            new_value_enc2 = quadrature_encoder_get_count(pio_quadenc, sm_quadenc2);
-            delta_enc2 = new_value_enc2 - old_value_enc2;
-            old_value_enc2 = new_value_enc2;
-    
-            if (new_value_enc1 != last_value_enc1 || delta_enc1 != last_delta_enc1 ) {
-                printf("enc1 position %8d, delta %6d\n", new_value_enc1, delta_enc1);
-                last_value_enc1 = new_value_enc1;
-                last_delta_enc1 = delta_enc1;
+            count++;                    
+            uint new_event = update_encoders();
+            if(new_event){
+                if(new_event == 1){
+                    printf("new_position_enc1: %d\n", new_position_enc1);
+                }
+                if(new_event == 2){
+                    printf("new_position_enc2: %d\n", new_position_enc2);
+                }
+                if(new_event == 3){
+                    printf("new_position_enc3: %d\n", new_position_enc3);
+                }
             }
-    
-            if (new_value_enc2 != last_value_enc2 || delta_enc2 != last_delta_enc2 ) {
-                printf("enc2 position %8d, delta %6d\n", new_value_enc2, delta_enc2);
-                last_value_enc2 = new_value_enc2;
-                last_delta_enc2 = delta_enc2;
-            }
-
             update_display(); 
         }
     }
@@ -140,7 +129,7 @@ int main()
 
 }
 
-void gen_waves() 
+void setup_waves() 
 { // =ROUND(63*(SIN(A1*2*PI()/256)/2+0.5),0)
     for (int i = 0; i < NUM_WAV_SAMPLES; i++) {
         fun_wave[i] = (uint8_t)round(R2R_MAX * (sin(i * 2 * M_PI / NUM_WAV_SAMPLES) / 2 + 0.5));
@@ -160,10 +149,12 @@ void r2r_program_init(PIO pio, uint sm, uint offset, uint base_pin, uint num_pin
     pio_sm_init(pio, sm, offset, &c);
 }
 
-void r2r_forever(PIO pio, uint sm, uint offset, uint base_pin, uint num_pins, float freq) 
+void setup_r2r(void) 
 {
-    r2r_program_init(pio, sm, offset, base_pin, num_pins, freq);  
-    pio_sm_set_enabled(pio, sm, true);
+    uint offset_r2r = pio_add_program(pio_r2r, &r2r_program);
+    printf("Loaded r2r program at %d\n", offset_r2r);     
+    r2r_program_init(pio_r2r, sm_r2r, offset_r2r, R2R_BASE_PIN, R2R_BITS, 440.0f);  
+    pio_sm_set_enabled(pio_r2r, sm_r2r, true);
 
 }
 
@@ -339,11 +330,11 @@ void update_display(void)
 
     char str[128];
 
-    // ssd1306_draw_string(&disp, 0, 0, 3, note[note_idx]);
+    ssd1306_draw_string(&disp, 0, 0, 1, "wavegen_r2r");
 
     memset(str, 0, sizeof(char));
     sprintf(str, " %d", count);
-    ssd1306_draw_string(&disp, 24, 0, 3, str);
+    ssd1306_draw_string(&disp, 0, 8, 1, str);
 
     // memset(str, 0, sizeof(char));
     // sprintf(str, "%d, %d", midi_idx, midi_cent);
@@ -351,4 +342,89 @@ void update_display(void)
 
     ssd1306_show(&disp);
 
+}
+
+void setup_encoders(void)
+{
+    // we don't really need to keep the offset, as this program must be loaded
+    // at offset 0
+    pio_add_program(pio_quadenc, &quadrature_encoder_program);
+    quadrature_encoder_program_init(pio_quadenc, sm_quadenc1, PIN_AB_ENC1, 2);
+    quadrature_encoder_program_init(pio_quadenc, sm_quadenc2, PIN_AB_ENC2, 2);
+    quadrature_encoder_program_init(pio_quadenc, sm_quadenc3, PIN_AB_ENC3, 2);
+
+    gpio_init(PIN_BUT_ENC1);
+    gpio_pull_up(PIN_BUT_ENC1);
+    gpio_set_irq_enabled_with_callback(PIN_BUT_ENC1, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &gpio_callback);
+    gpio_init(PIN_BUT_ENC2);
+    gpio_pull_up(PIN_BUT_ENC2);
+    gpio_set_irq_enabled_with_callback(PIN_BUT_ENC2, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &gpio_callback);
+    gpio_init(PIN_BUT_ENC3);
+    gpio_pull_up(PIN_BUT_ENC3);
+    gpio_set_irq_enabled_with_callback(PIN_BUT_ENC3, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &gpio_callback);
+
+}
+
+uint update_encoders(void)
+{
+    uint new_event = 0;
+
+    new_value_enc1 = quadrature_encoder_get_count(pio_quadenc, sm_quadenc1);
+    delta_enc1 = new_value_enc1 - old_value_enc1;
+    old_value_enc1 = new_value_enc1;
+    old_position_enc1 = new_position_enc1;
+    new_position_enc1 = new_value_enc1 >> 2;
+
+
+    new_value_enc2 = quadrature_encoder_get_count(pio_quadenc, sm_quadenc2);
+    delta_enc2 = new_value_enc2 - old_value_enc2;
+    old_value_enc2 = new_value_enc2;
+    old_position_enc2 = new_position_enc2;
+    new_position_enc2 = new_value_enc2 >> 2;
+
+
+    new_value_enc3 = quadrature_encoder_get_count(pio_quadenc, sm_quadenc3);
+    delta_enc3 = new_value_enc3 - old_value_enc3;
+    old_value_enc3 = new_value_enc3;
+    old_position_enc3 = new_position_enc3;
+    new_position_enc3 = new_value_enc3 >> 2;
+
+
+    if (new_value_enc1 != last_value_enc1 || delta_enc1 != last_delta_enc1 ) {
+        last_value_enc1 = new_value_enc1;
+        last_delta_enc1 = delta_enc1;
+    }
+
+    if (new_value_enc2 != last_value_enc2 || delta_enc2 != last_delta_enc2 ) {
+        last_value_enc2 = new_value_enc2;
+        last_delta_enc2 = delta_enc2;
+    }
+
+    if (new_value_enc3 != last_value_enc3 || delta_enc3 != last_delta_enc3 ) {
+        last_value_enc3 = new_value_enc3;
+        last_delta_enc3 = delta_enc3;
+    }
+
+    if(old_position_enc1 != new_position_enc1){
+        new_event = 1;
+    }
+    if(old_position_enc2 != new_position_enc2){
+        new_event = 2;
+    }
+    if(old_position_enc3 != new_position_enc3){
+        new_event = 3;
+    }
+
+    return new_event;
+}
+
+void setup_tones(void)
+{
+    for (int i = 0; i < 88; i++) {
+        int m = i + 21;
+        tones[i].midi = m;
+        tones[i].note = midi_to_note(m);
+        tones[i].octave = midi_to_octave(m);
+        tones[i].freq = 440.0 * pow(2.0, (m - 69) / 12.0);
+    }
 }
