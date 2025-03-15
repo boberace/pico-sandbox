@@ -13,6 +13,11 @@
 
 #define system_frequency clock_get_hz(clk_sys)
 
+#define tone_lowest 21
+#define tone_highest 108
+#define tone_starting 69
+#define num_tones (tone_highest - tone_lowest)
+
 const uint PIN_AB_ENC1 = 2; // 3 also used
 const uint PIN_BUT_ENC1 = 4;
 const uint PIN_BUT_ENC2 = 5;
@@ -52,7 +57,6 @@ uint8_t fun_wave[NUM_WAV_SAMPLES];
 
 int dma_chan_wave_bytes;
 int dma_chan_wave_loop;
-float con_pitch = 440.0;
 
 typedef struct {
     uint8_t midi;
@@ -60,10 +64,13 @@ typedef struct {
     uint8_t octave;
     float freq;
 } tone_t;
+tone_t tones[num_tones];
+float con_pitch = 440.0; // A4 - 440Hz
+float freq_current = 440.0; // A4 - 440Hz
+uint8_t tone_current = tone_starting; // A4 - 440Hz
+float cent_offset = 0.0;
 
-tone_t tones[88];
-
-uint count = 0;
+char* notes[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "Bb", "B"};
 
 uint midi_to_note(uint midi){(midi + 3) % 12;}
 uint midi_to_octave(uint midi){midi/12.0-1;}
@@ -84,8 +91,10 @@ void update_display(void);
 void setup_encoders(void);
 uint update_encoders(void);
 void setup_tones(void);
+void update_current_tone(void);
 // void change_fundamental(void);
 
+uint refresh_counter = 0;
 int main()
 {
     stdio_init_all();
@@ -109,11 +118,12 @@ int main()
         if( curr_millis_display - prev_millis_display > 100){
             prev_millis_display = curr_millis_display;
 
-            count++;                    
+            refresh_counter++;                    
             uint new_event = update_encoders();
             if(new_event){
                 if(new_event == 1){
-                    printf("new_position_enc1: %d\n", new_position_enc1);
+                    update_current_tone();
+                    printf("tone_current: %d\n", tone_current);
                 }
                 if(new_event == 2){
                     printf("new_position_enc2: %d\n", new_position_enc2);
@@ -333,7 +343,7 @@ void update_display(void)
     ssd1306_draw_string(&disp, 0, 0, 1, "wavegen_r2r");
 
     memset(str, 0, sizeof(char));
-    sprintf(str, " %d", count);
+    sprintf(str, " %d", refresh_counter);
     ssd1306_draw_string(&disp, 0, 8, 1, str);
 
     // memset(str, 0, sizeof(char));
@@ -420,11 +430,24 @@ uint update_encoders(void)
 
 void setup_tones(void)
 {
-    for (int i = 0; i < 88; i++) {
-        int m = i + 21;
+    for (int i = 0; i < num_tones; i++) {
+        int m = i + tone_lowest;
         tones[i].midi = m;
         tones[i].note = midi_to_note(m);
         tones[i].octave = midi_to_octave(m);
         tones[i].freq = 440.0 * pow(2.0, (m - 69) / 12.0);
     }
 }
+void update_current_tone(void)
+{
+    uint dt = new_position_enc1 - old_position_enc1;
+    int new_tone = tone_current + dt;
+    if (new_tone < tone_lowest) {
+        new_tone = tone_highest;
+    } else if (new_tone > tone_highest) {
+        new_tone = tone_lowest;
+    }
+    tone_current = new_tone;
+    // set_frequency(tones[tone_current - tone_lowest].freq);
+}
+
