@@ -28,43 +28,35 @@ set(PICO_BOARD pico CACHE STRING "Board type")
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
 
-project(wavegen_r2r C CXX ASM)
+project(MCP4251 C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(wavegen_r2r wavegen_r2r.c ssd1306.c )
+add_executable(MCP4251 MCP4251.c )
 
-pico_set_program_name(wavegen_r2r "wavegen_r2r")
-pico_set_program_version(wavegen_r2r "0.1")
-
-# Generate PIO headers
-pico_generate_pio_header(wavegen_r2r ${CMAKE_CURRENT_LIST_DIR}/quadrature_encoder.pio)
-pico_generate_pio_header(wavegen_r2r ${CMAKE_CURRENT_LIST_DIR}/r2r.pio)
-pico_generate_pio_header(wavegen_r2r ${CMAKE_CURRENT_LIST_DIR}/stroberef.pio)
+pico_set_program_name(MCP4251 "MCP4251")
+pico_set_program_version(MCP4251 "0.1")
 
 # Modify the below lines to enable/disable output over UART/USB
-pico_enable_stdio_uart(wavegen_r2r 0)
-pico_enable_stdio_usb(wavegen_r2r 1)
+pico_enable_stdio_uart(MCP4251 1)
+pico_enable_stdio_usb(MCP4251 1)
 
 # Add the standard library to the build
-target_link_libraries(wavegen_r2r
+target_link_libraries(MCP4251
         pico_stdlib)
 
 # Add the standard include files to the build
-target_include_directories(wavegen_r2r PRIVATE
+target_include_directories(MCP4251 PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
 )
 
 # Add any user requested libraries
-target_link_libraries(wavegen_r2r 
-        hardware_dma
-        hardware_pio
-        hardware_i2c
+target_link_libraries(MCP4251 
         hardware_spi
         )
 
-pico_add_extra_outputs(wavegen_r2r)
+pico_add_extra_outputs(MCP4251)
 

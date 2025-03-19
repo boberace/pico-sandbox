@@ -1,14 +1,17 @@
 #include "stdio.h"
 #include "pico/stdlib.h"
+#include "stdlib.h"
 #include "hardware/dma.h"
 #include "hardware/pio.h"
 #include "hardware/clocks.h"
 #include "hardware/gpio.h"
 #include "hardware/i2c.h"
+#include "hardware/spi.h"
 #include "math.h"
 #include "string.h"
 #include "quadrature_encoder.pio.h"
 #include "r2r.pio.h"
+#include "stroberef.pio.h"
 #include "ssd1306.h"
 
 #define system_frequency clock_get_hz(clk_sys)
@@ -24,19 +27,30 @@ const uint PIN_BUT_ENC2 = 5;
 const uint PIN_AB_ENC2 = 6; // 7 also used
 const uint PIN_AB_ENC3 = 20; // 21 also used
 const uint PIN_BUT_ENC3 = 22;
+const uint PIN_STROBEREF = 28;
 
-#define PIN_I2C_SDA 8
-#define PIN_I2C_SCL 9
 
 #define R2R_BITS 6
-#define R2R_BASE_PIN 10 // 11-15 also used
+#define PIN_R2R_BASE 10 // 11-15 also used
 #define R2R_MAX ((1 << R2R_BITS) - 1)
 #define NUM_WAV_SAMPLES 125
 
+#define PIN_DIGIPOT_SDO 16
+#define PIN_DIGIPOT_CS 17
+#define PIN_DIGIPOT_SCK 18
+#define PIN_DIGIPOT_SDI 19
+#define PIN_DIGIPOT_SHDN 27
+#define SPI_A_BAUD_RATE  1 * 1000 * 1000
+#define SPI_A_INST spi0
+
+#define PIN_I2C_SDA 8
+#define PIN_I2C_SCL 9
 #define I2C0_BUADRATE 400*1000
 ssd1306_t disp; // create oled display instance
 
 static char event_str[128];
+uint8_t interrupt_gpio = 0;
+uint32_t interrupt_event = 0;
 
 PIO pio_quadenc = pio0;
 uint sm_quadenc1 = 0;
@@ -52,6 +66,9 @@ int last_value_enc3 = -1, last_delta_enc3 = -1;
 
 PIO pio_r2r = pio1;
 uint sm_r2r = 0;
+
+PIO pio_stroberef = pio1;
+uint sm_stroberef = 1;
 
 uint8_t fun_wave[NUM_WAV_SAMPLES];
 
@@ -69,7 +86,7 @@ float con_pitch = 440.0; // A4 - 440Hz
 float freq_current = 440.0; // A4 - 440Hz
 uint8_t tone_current = tone_starting; // A4 - 440Hz
 int8_t cent_offset = 0;
-uint8_t intensity = 64;
+int16_t intensity = 0xAA;
 
 char* notes[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "Bb", "B"};
 
@@ -79,6 +96,8 @@ uint midi_to_octave(uint midi){midi/12.0-1;}
 void setup_waves();
 void r2r_program_init(PIO pio, uint sm, uint offset, uint base_pin, uint num_pins, float freq);
 void setup_r2r(void);
+void stroberef_program_init(PIO pio, uint sm, uint offset, uint pin, float freq);
+void setup_stroberef(void);
 void setup_dma_wave();
 void dma_handler_wave();
 void set_frequency(float freq);
@@ -96,6 +115,9 @@ void update_current_tone(void);
 void update_intensity(void);
 void update_cent_off(void);
 void update_frequency(void);
+uint setup_spia();
+int digipot_set_value(bool wiper, uint16_t value);
+int digipot_read_value(bool wiper, uint16_t * dst);
 // void change_fundamental(void);
 
 uint refresh_counter = 0;
@@ -106,14 +128,21 @@ int main()
 
     setup_waves();  
     setup_r2r();
+    setup_stroberef();
     setup_dma_wave();
     setup_encoders();
     setup_i2c0();
     setup_oled();
     setup_tones();
+    int spi_ret = setup_spia();
+    if(abs((int)(SPI_A_BAUD_RATE-spi_ret)) > 0.05*SPI_A_BAUD_RATE ){
+        printf("SPIA setup failed %d\r\n", spi_ret);
+        return 1;
+    };
+    printf("setup_spi baud rate %d\r\n", spi_ret);
 
     uint32_t prev_millis_display = to_ms_since_boot(get_absolute_time());
-    uint32_t curr_millis_display = to_ms_since_boot(get_absolute_time());
+    uint32_t curr_millis_display = to_ms_since_boot(get_absolute_time());    
 
     while(true){
 
@@ -135,9 +164,17 @@ int main()
                 if(new_event == 3){
                     update_cent_off();
                 }
-                printf("tone_current: %d, freq_current %f hz, cent_offset %d\n", tone_current, freq_current, cent_offset);
+                printf("tone_current: %d, freq_current %f hz, cent_offset %d, intensity %d\n", tone_current, freq_current, cent_offset, intensity);
             }
             update_display(); 
+        }
+        if(interrupt_event){
+            printf("interrupt_gpio %d\n", interrupt_gpio);
+            printf("GPIO %d %s\n", interrupt_gpio, event_str);
+            if(interrupt_event == 0x8){
+
+            }
+            interrupt_event = 0;
         }
     }
 
@@ -168,8 +205,28 @@ void setup_r2r(void)
 {
     uint offset_r2r = pio_add_program(pio_r2r, &r2r_program);
     printf("Loaded r2r program at %d\n", offset_r2r);     
-    r2r_program_init(pio_r2r, sm_r2r, offset_r2r, R2R_BASE_PIN, R2R_BITS, 440.0f);  
+    r2r_program_init(pio_r2r, sm_r2r, offset_r2r, PIN_R2R_BASE, R2R_BITS, con_pitch);  
     pio_sm_set_enabled(pio_r2r, sm_r2r, true);
+
+}
+
+void stroberef_program_init(PIO pio, uint sm, uint offset, uint pin, float freq) 
+{       
+    pio_gpio_init(pio, pin);
+    pio_sm_set_consecutive_pindirs(pio, sm, pin, 1, true);
+    pio_sm_config c = stroberef_program_get_default_config(offset);  
+    sm_config_set_set_pins(&c, pin, 1);
+    float div = system_frequency/freq/32/2; // 32 leds / 2 instructions in pio program
+    sm_config_set_clkdiv(&c, div); 
+    pio_sm_init(pio, sm, offset, &c);
+}
+
+void setup_stroberef(void) 
+{
+    uint offset_stroberef = pio_add_program(pio_stroberef, &stroberef_program);
+    printf("Loaded stroberef program at %d\n", offset_stroberef);     
+    stroberef_program_init(pio_stroberef, sm_stroberef, offset_stroberef, PIN_STROBEREF, con_pitch);  
+    pio_sm_set_enabled(pio_stroberef, sm_stroberef, true);
 
 }
 
@@ -226,7 +283,9 @@ void dma_handler_wave()
 void set_frequency(float freq) 
 {
     pio_sm_set_clkdiv(pio_r2r, sm_r2r, system_frequency/NUM_WAV_SAMPLES/freq);
+    pio_sm_set_clkdiv(pio_stroberef, sm_stroberef, system_frequency/freq/32/2);
 }   
+
 
 // max_step_rate is used to lower the clock of the state machine to save power
 // if the application doesn't require a very high sampling rate. Passing zero
@@ -307,12 +366,12 @@ for (uint i = 0; i < 4; i++) {
 *buf++ = '\0';
 }
 
-void gpio_callback(uint gpio, uint32_t events) 
-{
-    // Put the GPIO event(s) that just happened into event_str
-    // so we can print it
+void gpio_callback(uint gpio, uint32_t events) {
+
     gpio_event_string(event_str, events);
-    printf("GPIO %d %s\n", gpio, event_str);
+    interrupt_gpio = gpio;
+    interrupt_event = events;
+
 }
 
 void setup_i2c0(void)
@@ -439,7 +498,7 @@ void setup_tones(void)
         tones[i].midi = m;
         tones[i].note = midi_to_note(m);
         tones[i].octave = midi_to_octave(m);
-        tones[i].freq = 440.0 * pow(2.0, (m - 69) / 12.0);
+        tones[i].freq = con_pitch * pow(2.0, (m - 69) / 12.0);
     }
 }
 void update_current_tone(void)
@@ -457,13 +516,13 @@ void update_current_tone(void)
 
 void update_intensity(void)
 {
-    uint de = new_position_enc2 - old_position_enc2;
-    uint8_t new_intensity = intensity + de;
-    // if (new_intensity < 0) {
-    //     new_intensity = 0;
-    // } else if (new_intensity > 127) {
-    //     new_intensity = 127;
-    // }
+    int de = new_position_enc2 - old_position_enc2;
+    int16_t new_intensity = intensity + de;
+    if (new_intensity < 0) {
+        new_intensity = 256;
+    } else if (new_intensity > 256) {
+        new_intensity = 0;
+    }
     intensity = new_intensity;
 }
 
@@ -485,4 +544,45 @@ void update_frequency(void)
 {
     freq_current = tones[tone_current - tone_lowest].freq*pow(2.0, cent_offset / 1200.0);
     set_frequency(freq_current);
+}
+
+uint setup_spia()
+{   // setup for 16 bit SPI
+
+    uint spi_ret = spi_init(SPI_A_INST, SPI_A_BAUD_RATE);
+    spi_set_format(SPI_A_INST, 16, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
+    gpio_set_function(PIN_DIGIPOT_SDO, GPIO_FUNC_SPI);
+    gpio_set_function(PIN_DIGIPOT_SCK, GPIO_FUNC_SPI);
+    gpio_set_function(PIN_DIGIPOT_SDI, GPIO_FUNC_SPI); 
+    gpio_set_function(PIN_DIGIPOT_CS, GPIO_FUNC_SPI); 
+    gpio_set_dir(PIN_DIGIPOT_CS, GPIO_OUT);
+    gpio_put(PIN_DIGIPOT_CS, 1);
+
+    return spi_ret;
+
+}
+
+int digipot_set_value(bool wiper, uint16_t value)
+{ 
+    // DS22060B-TABLE 7-2
+
+    value = value & 0x1FF; // 9 bits
+    int nw = 0;         
+    uint16_t buf = (wiper << 12) | value;
+    nw = spi_write16_blocking(SPI_A_INST, &buf, 1);
+    sleep_us(1);
+
+    return nw;
+}
+
+int digipot_read_value(bool wiper, uint16_t * dst)
+{ 
+    // DS22060B-TABLE 7-2  
+    uint16_t buf;    
+    buf = ((wiper << 4) | (0b11 << 2)) << 8;
+    int nr = 0;
+    nr = spi_read16_blocking(SPI_A_INST, buf, dst, 1);
+    sleep_us(1);
+
+    return nr;
 }

@@ -1,0 +1,3 @@
+.program stroberef
+	set pins, 1
+	set pins, 0
