@@ -1,0 +1,3 @@
+.program r2r
+    out pins, 8
+

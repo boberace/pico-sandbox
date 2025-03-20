@@ -86,7 +86,7 @@ float con_pitch = 440.0; // A4 - 440Hz
 float freq_current = 440.0; // A4 - 440Hz
 uint8_t tone_current = tone_starting; // A4 - 440Hz
 int8_t cent_offset = 0;
-int16_t intensity = 0xAA;
+int16_t intensity = 0;
 
 char* notes[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "Bb", "B"};
 
@@ -120,6 +120,13 @@ int digipot_set_value(bool wiper, uint16_t value);
 int digipot_read_value(bool wiper, uint16_t * dst);
 // void change_fundamental(void);
 
+void printBinary(uint num, int num_bits) {
+    for (int i = num_bits - 1; i >= 0; i--) {
+        printf("%d", (num >> i) & 1);
+    }
+    printf("\n");
+}
+
 uint refresh_counter = 0;
 int main()
 {
@@ -141,8 +148,19 @@ int main()
     };
     printf("setup_spi baud rate %d\r\n", spi_ret);
 
+    int num_written;
+    int num_read;
+    uint16_t rv;
+
+    num_written = digipot_set_value(1, intensity);
+    printf("pot 1, half words written %d, write value %d\n", num_written, intensity); 
+    num_read = digipot_read_value(1, &rv);
+    printf("pot 1, half words read %d, read value %d, read command ",num_read, rv & 0x1FF);
+    printBinary(rv >> 9, 7);
+
     uint32_t prev_millis_display = to_ms_since_boot(get_absolute_time());
     uint32_t curr_millis_display = to_ms_since_boot(get_absolute_time());    
+
 
     while(true){
 
@@ -160,6 +178,11 @@ int main()
                 }
                 if(new_event == 2){
                     update_intensity(); 
+                    num_written = digipot_set_value(1, intensity);
+                    printf("pot 1, half words written %d, write value %d\n", num_written, intensity); 
+                    num_read = digipot_read_value(1, &rv);
+                    printf("pot 1, half words read %d, read value %d, read command ",num_read, rv & 0x1FF);
+                    printBinary(rv >> 9, 7);
                 }
                 if(new_event == 3){
                     update_cent_off();
@@ -172,7 +195,9 @@ int main()
             printf("interrupt_gpio %d\n", interrupt_gpio);
             printf("GPIO %d %s\n", interrupt_gpio, event_str);
             if(interrupt_event == 0x8){
-
+                num_read = digipot_read_value(1, &rv);
+                printf("pot 1, half words read %d, read value %d, read command ",num_read, rv & 0x1FF);
+                printBinary(rv >> 9, 7);
             }
             interrupt_event = 0;
         }
