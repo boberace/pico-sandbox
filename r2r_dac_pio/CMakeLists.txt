@@ -28,43 +28,40 @@ set(PICO_BOARD pico CACHE STRING "Board type")
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
 
-project(wavegen_r2r C CXX ASM)
+project(r2r_dac_pio C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(wavegen_r2r wavegen_r2r.c ssd1306.c )
+add_executable(r2r_dac_pio r2r_dac_pio.c )
 
-pico_set_program_name(wavegen_r2r "wavegen_r2r")
-pico_set_program_version(wavegen_r2r "0.1")
+pico_set_program_name(r2r_dac_pio "r2r_dac_pio")
+pico_set_program_version(r2r_dac_pio "0.1")
 
-# Generate PIO headers
-pico_generate_pio_header(wavegen_r2r ${CMAKE_CURRENT_LIST_DIR}/quadrature_encoder.pio)
-pico_generate_pio_header(wavegen_r2r ${CMAKE_CURRENT_LIST_DIR}/r2r.pio)
-pico_generate_pio_header(wavegen_r2r ${CMAKE_CURRENT_LIST_DIR}/stroberef.pio)
+# Generate PIO header
+pico_generate_pio_header(r2r_dac_pio ${CMAKE_CURRENT_LIST_DIR}/blink.pio)
+pico_generate_pio_header(r2r_dac_pio ${CMAKE_CURRENT_LIST_DIR}/r2r.pio)
 
 # Modify the below lines to enable/disable output over UART/USB
-pico_enable_stdio_uart(wavegen_r2r 0)
-pico_enable_stdio_usb(wavegen_r2r 1)
+pico_enable_stdio_uart(r2r_dac_pio 1)
+pico_enable_stdio_usb(r2r_dac_pio 0)
 
 # Add the standard library to the build
-target_link_libraries(wavegen_r2r
+target_link_libraries(r2r_dac_pio
         pico_stdlib)
 
 # Add the standard include files to the build
-target_include_directories(wavegen_r2r PRIVATE
+target_include_directories(r2r_dac_pio PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
 )
 
 # Add any user requested libraries
-target_link_libraries(wavegen_r2r 
-        hardware_dma
+target_link_libraries(r2r_dac_pio 
         hardware_pio
-        hardware_i2c
-        hardware_spi
+        hardware_dma
         )
 
-pico_add_extra_outputs(wavegen_r2r)
+pico_add_extra_outputs(r2r_dac_pio)
 
