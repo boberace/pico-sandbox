@@ -50,8 +50,8 @@ int dma_chan_wave_loop;
 #define SPI_A_BAUD_RATE  1 * 1000 * 1000
 #define SPI_A_INST spi0
 
-#define PIN_I2C_SDA 8
-#define PIN_I2C_SCL 9
+#define PIN_I2C0_SDA 8
+#define PIN_I2C0_SCL 9
 #define I2C0_BUADRATE 400*1000
 ssd1306_t disp; // create oled display instance
 
@@ -541,10 +541,10 @@ void setup_i2c0(void)
 {
 
     i2c_init(i2c0, I2C0_BUADRATE);
-    gpio_set_function(PIN_I2C_SDA, GPIO_FUNC_I2C);
-    gpio_set_function(PIN_I2C_SCL, GPIO_FUNC_I2C);
-    gpio_pull_up(PIN_I2C_SDA);
-    gpio_pull_up(PIN_I2C_SCL);
+    gpio_set_function(PIN_I2C0_SDA, GPIO_FUNC_I2C);
+    gpio_set_function(PIN_I2C0_SCL, GPIO_FUNC_I2C);
+    gpio_pull_up(PIN_I2C0_SDA);
+    gpio_pull_up(PIN_I2C0_SCL);
 }
 
 
