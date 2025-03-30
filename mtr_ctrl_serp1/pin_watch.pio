@@ -20,6 +20,7 @@ fall:
     nop [31]
     nop [31]
     nop [31]
+
     set pins 0
     JMP begin ; go back to begining
 

@@ -10,22 +10,33 @@
 
 ; computed jumps: 
 begin:
-    JMP sample          ; 0b00 (0) previous 0 current 0 - no pin change
-    JMP sample side 0   ; 0b01 (1) previous 0 current 1 - pin rise 
-    JMP update side 1   ; 0b10 (2) previous 1 current 0 - pin fall
-    JMP sample          ; 0b11 (3) previous 1 current 1 - no pin change
+    JMP sample               ; 0b00 (0) previous 0 current 0 - no pin change
+    JMP update_rise side 0   ; 0b01 (1) previous 0 current 1 - pin rise 
+    JMP update_fall side 1   ; 0b10 (2) previous 1 current 0 - pin fall
+    JMP sample               ; 0b11 (3) previous 1 current 1 - no pin change
 
-update:
-    JMP Y--, continue_update ; decrement y, always go to next instruction
+update_rise:
+    JMP Y--, continue_update_rise ; decrement y, always go to next instruction
 
-continue_update:
+continue_update_rise:
     MOV ISR, ~Y  ; copy Y scratch register negate into ISR, this is the tic increment value
     PUSH noblock ; push contents of ISR to RX FIFO (clears ISR), don't wait
+    irq 0 rel
+    SET Y, 0 ;  reset the y register
+    JMP begin ; go back to beginin, keeps sample and update loops same cycle count
+
+update_fall:
+    JMP Y--, continue_update_fall ; decrement y, always go to next instruction
+
+continue_update_fall:
+    MOV ISR, ~Y  ; copy Y scratch register negate into ISR, this is the tic increment value
+    PUSH noblock ; push contents of ISR to RX FIFO (clears ISR), don't wait
+    irq 1 rel
     SET Y, 0 ;  reset the y register
     JMP begin ; go back to beginin, keeps sample and update loops same cycle count
 
 sample:
-    JMP Y--, continue_sample ; decrement y, always go to next instruction
+    JMP Y--, continue_sample [1] ; decrement y, always go to next instruction
 
 continue_sample:
     OUT ISR, 1    ; shift previous state of input pin stored in OSR to ISR 

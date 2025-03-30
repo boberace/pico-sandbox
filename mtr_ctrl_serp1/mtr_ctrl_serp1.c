@@ -36,12 +36,18 @@ PIO pio_pin_tic_counter = pio0;
 uint sm_hall_lcen_tic_counter = 0; 
 uint sm_hall_rbtw_tic_counter = 1;
 
+uint hall_lcen_tic_counter_rise = 0;
+uint hall_lcen_tic_counter_fall = 0;
+uint hall_rbtw_tic_counter_rise = 0;
+uint hall_rbtw_tic_counter_fall = 0;
+
+volatile bool hall_flag = false;
+
 bool clockwise = true;
 bool hall_lcen_initial = false;
 bool hall_rbtw_initial = false;
 bool hall_lcen = false;
 bool hall_rbtw = false;
-bool state_A = false;
 
 void blink_program_init(PIO pio, uint sm, uint offset, uint pin, float freq);
 void setup_motor();
@@ -49,6 +55,43 @@ void coil_A(bool a, bool b);
 void pin_tic_counter_program_init(PIO pio, uint sm, uint mon_pin, uint fb_pin);
 static inline int32_t pin_tic_counter_get_tics(PIO pio, uint sm);
 void pin_watch_program_init(PIO pio, uint sm, uint offset, uint pin_watch, uint pin_led);
+
+void hall_isr0()
+{   
+    if (pio_interrupt_get(pio_pin_tic_counter, 0)) {
+    // Check which state machine caused the IRQ
+    if (pio_sm_get_rx_fifo_level(pio_pin_tic_counter, sm_hall_lcen_tic_counter) > 0) 
+    {
+        coil_A(!clockwise, clockwise);
+        hall_lcen_tic_counter_rise = pin_tic_counter_get_tics(pio_pin_tic_counter, sm_hall_lcen_tic_counter);
+    } 
+    else if (pio_sm_get_rx_fifo_level(pio_pin_tic_counter, sm_hall_rbtw_tic_counter) > 0) 
+    {
+        hall_rbtw_tic_counter_rise = pin_tic_counter_get_tics(pio_pin_tic_counter, sm_hall_rbtw_tic_counter);
+    }   
+    // Clear the IRQ
+    pio_interrupt_clear(pio_pin_tic_counter, 0);
+    hall_flag = true;
+    }
+}
+
+void hall_isr1(){   
+    if (pio_interrupt_get(pio_pin_tic_counter, 1)) {
+        // Check which state machine caused the IRQ
+        if (pio_sm_get_rx_fifo_level(pio_pin_tic_counter, sm_hall_lcen_tic_counter) > 0) 
+        {
+            coil_A(clockwise, !clockwise);
+            hall_lcen_tic_counter_fall = pin_tic_counter_get_tics(pio_pin_tic_counter, sm_hall_lcen_tic_counter);
+        } 
+        else if (pio_sm_get_rx_fifo_level(pio_pin_tic_counter, sm_hall_rbtw_tic_counter) > 0) 
+        {
+            hall_rbtw_tic_counter_fall = pin_tic_counter_get_tics(pio_pin_tic_counter, sm_hall_rbtw_tic_counter);
+        }   
+        // Clear the IRQ
+        pio_interrupt_clear(pio_pin_tic_counter, 1);
+        hall_flag = true;
+        }
+}
 
 int main()
 {
@@ -64,53 +107,28 @@ int main()
     pio_add_program(pio_pin_tic_counter, &pin_tic_counter_program);    
     pin_tic_counter_program_init(pio_pin_tic_counter, sm_hall_lcen_tic_counter, PIN_HALL_LCEN, PIN_LED_LCEN);
     pin_tic_counter_program_init(pio_pin_tic_counter, sm_hall_rbtw_tic_counter, PIN_HALL_RBTW, PIN_LED_RBTW);
-
  
     // uint offset = pio_add_program(pio_blink, &blink_program);
     // blink_program_init(pio_blink, sm_blink, offset, PIN_LED, 1.0f); // 1Hz    
 
-    setup_motor();    
-        
-    hall_lcen = gpio_get(PIN_LED_LCEN);
-    hall_rbtw = gpio_get(PIN_LED_RBTW);
+    setup_motor();           
 
-    uint hall_lcen_tic_counter = 0; 
-    uint hall_rbtw_tic_counter = 0; 
 
-    bool hall_flag = false;
+    irq_set_exclusive_handler(PIO0_IRQ_0, hall_isr0);
+    irq_set_enabled(PIO0_IRQ_0, true);
 
-    state_A = hall_rbtw_initial ? !hall_lcen_initial : hall_lcen_initial;
+    irq_set_exclusive_handler(PIO0_IRQ_1, hall_isr1);
+    irq_set_enabled(PIO0_IRQ_1, true);
 
     uint32_t prev_millis_display = to_ms_since_boot(get_absolute_time());
     uint32_t curr_millis_display = to_ms_since_boot(get_absolute_time());   
 
     while (true) {
-        hall_lcen = gpio_get(PIN_LED_LCEN);
-        hall_rbtw = gpio_get(PIN_LED_RBTW);
-        if (!clockwise) {
-            if (hall_lcen != state_A) {
-                state_A = hall_lcen;
-                coil_A(!state_A, state_A);
-                hall_flag = true;     
-            }
-        } else { // counter clockwise
-            if (hall_lcen == state_A) {
-                state_A = !hall_lcen;
-                coil_A(state_A, !state_A);
-                hall_flag = true;
-            }
-        }
-        if (hall_flag) {
-            hall_flag = false;
-            hall_lcen_tic_counter = pin_tic_counter_get_tics(pio_pin_tic_counter, sm_hall_lcen_tic_counter);
-            hall_rbtw_tic_counter = pin_tic_counter_get_tics(pio_pin_tic_counter, sm_hall_rbtw_tic_counter);                
-
-        }
 
         curr_millis_display = to_ms_since_boot(get_absolute_time());
         if( curr_millis_display - prev_millis_display > 1000){
             prev_millis_display = curr_millis_display;            
-            printf("Hall lcen tics: %d, Hall rbtw tics: %d\n", hall_lcen_tic_counter, hall_rbtw_tic_counter);
+            printf("lcen: rise %d, fall %d <> rbtw: rise %d, fall %d\n", hall_lcen_tic_counter_rise, hall_lcen_tic_counter_fall, hall_rbtw_tic_counter_rise, hall_rbtw_tic_counter_fall);
         }
     }
 
@@ -153,8 +171,9 @@ void setup_motor() {
 
 }
 void coil_A(bool a, bool b){
-    gpio_put(PIN_CA1, a);
-    gpio_put(PIN_CA2, b);
+    uint32_t mask = (1 << PIN_CA1) | (1 << PIN_CA2); // Mask for PIN_CA1 and PIN_CA2
+    uint32_t value = (a << PIN_CA1) | (b << PIN_CA2); // Set values for PIN_CA1 and PIN_CA2
+    gpio_put_masked(mask, value);
 }
 
 
@@ -178,8 +197,11 @@ void pin_tic_counter_program_init(PIO pio, uint sm, uint mon_pin, uint fb_pin) {
     sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_NONE); 
 
     // sm_config_set_clkdiv_int_frac8(&c, 1, 0);
-    float clkdiv = ((float)FSYS / 1000000.0) / 6.0; // 1 MHz - 6 cycles per loop in pio
+    float clkdiv = ((float)FSYS / 1000000.0) / 7.0; // 1 MHz - 7 cycles per loop in pio
     sm_config_set_clkdiv(&c, clkdiv);
+
+    pio_set_irq0_source_enabled(pio, pis_interrupt0, true);
+    pio_set_irq1_source_enabled(pio, pis_interrupt1, true);
 
     pio_sm_init(pio, sm, 0, &c);
     pio_sm_set_enabled(pio, sm, true);
@@ -218,9 +240,6 @@ void pin_watch_program_init(PIO pio, uint sm, uint offset, uint pin_watch, uint 
     sm_config_set_in_shift(&c, false, false, 32);
     // don't join FIFO's
     sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_NONE); 
-
-    // pio_set_irq0_source_enabled(pio, pis_interrupt0, true);
-    // pio_set_irq1_source_enabled(pio, pis_interrupt1, true);
 
     float clkdiv = ((float)FSYS / 1000000.0); 
     sm_config_set_clkdiv(&c, clkdiv);
