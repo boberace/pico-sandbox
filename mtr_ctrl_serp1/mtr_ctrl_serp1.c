@@ -15,8 +15,8 @@
 #define PIN_CA2 18
 #define PIN_MTR_ENA 22
 
-#define PIN_HALL_LCEN 20 // 15 // on left
-#define PIN_HALL_RBTW 21 // 14 // on right
+#define PIN_HALL_LCEN 21 
+#define PIN_HALL_RBTW 20 
 
 #define PIN_LED_LCEN 2
 #define PIN_LED_RBTW 3
@@ -34,12 +34,12 @@ uint sm_pin_watch = 0;
 
 PIO pio_pin_tic_counter = pio0;   
 uint sm_hall_lcen_tic_counter = 0; 
-uint sm_hall_rbtw_tic_counter = 1;
+uint sm_hall_rbtw_tic_counter = 2;
 
-uint hall_lcen_tic_counter_rise = 0;
-uint hall_lcen_tic_counter_fall = 0;
-uint hall_rbtw_tic_counter_rise = 0;
-uint hall_rbtw_tic_counter_fall = 0;
+uint hall_lcen_tic_counter_rise = 1;
+uint hall_lcen_tic_counter_fall = 2;
+uint hall_rbtw_tic_counter_rise = 3;
+uint hall_rbtw_tic_counter_fall = 4;
 
 volatile bool hall_flag = false;
 
@@ -56,41 +56,33 @@ void pin_tic_counter_program_init(PIO pio, uint sm, uint mon_pin, uint fb_pin);
 static inline int32_t pin_tic_counter_get_tics(PIO pio, uint sm);
 void pin_watch_program_init(PIO pio, uint sm, uint offset, uint pin_watch, uint pin_led);
 
-void hall_isr0()
+void pin_tic_counter_isr()
 {   
-    if (pio_interrupt_get(pio_pin_tic_counter, 0)) {
-    // Check which state machine caused the IRQ
-    if (pio_sm_get_rx_fifo_level(pio_pin_tic_counter, sm_hall_lcen_tic_counter) > 0) 
+    uint16_t irq_status = (pio_pin_tic_counter->irq);
+    
+    if (irq_status & (1 << 0)) // SM0 IRQ0 (0 + 0) % 4 = 0
     {
-        coil_A(!clockwise, clockwise);
+        
         hall_lcen_tic_counter_rise = pin_tic_counter_get_tics(pio_pin_tic_counter, sm_hall_lcen_tic_counter);
-    } 
-    else if (pio_sm_get_rx_fifo_level(pio_pin_tic_counter, sm_hall_rbtw_tic_counter) > 0) 
-    {
-        hall_rbtw_tic_counter_rise = pin_tic_counter_get_tics(pio_pin_tic_counter, sm_hall_rbtw_tic_counter);
     }   
-    // Clear the IRQ
-    pio_interrupt_clear(pio_pin_tic_counter, 0);
-    hall_flag = true;
+    if (irq_status & (1 << 1)) // SM0 IRQ1 (0 + 1) % 4 = 1
+    {
+        
+        hall_lcen_tic_counter_fall = pin_tic_counter_get_tics(pio_pin_tic_counter, sm_hall_lcen_tic_counter);
+    }     
+    if (irq_status & (1 << 2)) // SM2 IRQ0 (2 + 0) % 4 = 2
+    { 
+        coil_A(!clockwise, clockwise);
+        hall_rbtw_tic_counter_rise = pin_tic_counter_get_tics(pio_pin_tic_counter, sm_hall_rbtw_tic_counter);
     }
-}
-
-void hall_isr1(){   
-    if (pio_interrupt_get(pio_pin_tic_counter, 1)) {
-        // Check which state machine caused the IRQ
-        if (pio_sm_get_rx_fifo_level(pio_pin_tic_counter, sm_hall_lcen_tic_counter) > 0) 
-        {
-            coil_A(clockwise, !clockwise);
-            hall_lcen_tic_counter_fall = pin_tic_counter_get_tics(pio_pin_tic_counter, sm_hall_lcen_tic_counter);
-        } 
-        else if (pio_sm_get_rx_fifo_level(pio_pin_tic_counter, sm_hall_rbtw_tic_counter) > 0) 
-        {
-            hall_rbtw_tic_counter_fall = pin_tic_counter_get_tics(pio_pin_tic_counter, sm_hall_rbtw_tic_counter);
-        }   
-        // Clear the IRQ
-        pio_interrupt_clear(pio_pin_tic_counter, 1);
-        hall_flag = true;
-        }
+    if (irq_status & (1 << 3)) // SM2 IRQ1 (2 + 1) % 4 = 3
+    { 
+        coil_A(clockwise, !clockwise);
+        hall_rbtw_tic_counter_fall = pin_tic_counter_get_tics(pio_pin_tic_counter, sm_hall_rbtw_tic_counter);
+    }
+    // printf("irq_status: %d\n", irq_status);
+    // Clear the IRQs
+    pio_pin_tic_counter->irq = irq_status;
 }
 
 int main()
@@ -114,10 +106,10 @@ int main()
     setup_motor();           
 
 
-    irq_set_exclusive_handler(PIO0_IRQ_0, hall_isr0);
+    irq_set_exclusive_handler(PIO0_IRQ_0, pin_tic_counter_isr);
     irq_set_enabled(PIO0_IRQ_0, true);
 
-    irq_set_exclusive_handler(PIO0_IRQ_1, hall_isr1);
+    irq_set_exclusive_handler(PIO0_IRQ_1, pin_tic_counter_isr);
     irq_set_enabled(PIO0_IRQ_1, true);
 
     uint32_t prev_millis_display = to_ms_since_boot(get_absolute_time());
@@ -201,7 +193,9 @@ void pin_tic_counter_program_init(PIO pio, uint sm, uint mon_pin, uint fb_pin) {
     sm_config_set_clkdiv(&c, clkdiv);
 
     pio_set_irq0_source_enabled(pio, pis_interrupt0, true);
-    pio_set_irq1_source_enabled(pio, pis_interrupt1, true);
+    pio_set_irq0_source_enabled(pio, pis_interrupt1, true);
+    pio_set_irq0_source_enabled(pio, pis_interrupt2, true);
+    pio_set_irq1_source_enabled(pio, pis_interrupt3, true);
 
     pio_sm_init(pio, sm, 0, &c);
     pio_sm_set_enabled(pio, sm, true);
