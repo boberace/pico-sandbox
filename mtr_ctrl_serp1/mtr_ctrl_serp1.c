@@ -29,8 +29,8 @@
 PIO pio_pin_watch = pio1;
 uint sm_pin_watch = 0;
 
-// PIO pio_blink = pio0;
-// uint sm_blink = 1;
+PIO pio_blink = pio1;
+uint sm_blink = 1;
 
 PIO pio_pin_tic_counter = pio0;   
 uint sm_hall_lcen_tic_counter = 0; 
@@ -91,20 +91,19 @@ int main()
 
     sleep_ms(1000); 
 
-   // offset not used as we have to load the program at address 0
-   uint offset = pio_add_program(pio_pin_watch, &pin_watch_program);
-   pin_watch_program_init(pio_pin_watch, sm_pin_watch, 0, PIN_SPD_SEN, PIN_SPD_LED); 
+    // offset not used as the program is loaded at address 0
+    pio_add_program(pio_pin_watch, &pin_watch_program);
+    pin_watch_program_init(pio_pin_watch, sm_pin_watch, 0, PIN_SPD_SEN, PIN_SPD_LED); 
 
-
+    // offset not used as the program is loaded at address 0
     pio_add_program(pio_pin_tic_counter, &pin_tic_counter_program);    
     pin_tic_counter_program_init(pio_pin_tic_counter, sm_hall_lcen_tic_counter, PIN_HALL_LCEN, PIN_LED_LCEN);
     pin_tic_counter_program_init(pio_pin_tic_counter, sm_hall_rbtw_tic_counter, PIN_HALL_RBTW, PIN_LED_RBTW);
  
-    // uint offset = pio_add_program(pio_blink, &blink_program);
-    // blink_program_init(pio_blink, sm_blink, offset, PIN_LED, 1.0f); // 1Hz    
+    uint offset = pio_add_program(pio_blink, &blink_program);
+    blink_program_init(pio_blink, sm_blink, offset, PIN_LED, 1.0f); // 1Hz    
 
     setup_motor();           
-
 
     irq_set_exclusive_handler(PIO0_IRQ_0, pin_tic_counter_isr);
     irq_set_enabled(PIO0_IRQ_0, true);
@@ -120,7 +119,7 @@ int main()
         curr_millis_display = to_ms_since_boot(get_absolute_time());
         if( curr_millis_display - prev_millis_display > 1000){
             prev_millis_display = curr_millis_display;            
-            printf("lcen: rise %d, fall %d <> rbtw: rise %d, fall %d\n", hall_lcen_tic_counter_rise, hall_lcen_tic_counter_fall, hall_rbtw_tic_counter_rise, hall_rbtw_tic_counter_fall);
+            printf("lcen: rise ~%d~ fall ~%d~ <> rbtw: rise ~%d~, fall ~%d~\n", hall_lcen_tic_counter_rise, hall_lcen_tic_counter_fall, hall_rbtw_tic_counter_rise, hall_rbtw_tic_counter_fall);
         }
     }
 
@@ -151,17 +150,7 @@ void setup_motor() {
 
     gpio_init(PIN_MTR_ENA);
     gpio_set_dir(PIN_MTR_ENA, GPIO_OUT);
-    gpio_put(PIN_MTR_ENA, 1);
-
-    gpio_init(PIN_HALL_LCEN);
-    gpio_set_dir(PIN_HALL_LCEN, GPIO_IN);
-
-    gpio_init(PIN_HALL_RBTW);
-    gpio_set_dir(PIN_HALL_RBTW, GPIO_IN);
-
-    coil_A(0, 0);
-    hall_lcen = gpio_get(PIN_HALL_LCEN);
-    hall_rbtw = gpio_get(PIN_HALL_RBTW);
+    gpio_put(PIN_MTR_ENA, 1);  
 
 }
 void coil_A(bool a, bool b){
