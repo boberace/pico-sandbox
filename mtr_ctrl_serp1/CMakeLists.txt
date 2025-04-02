@@ -66,3 +66,35 @@ target_link_libraries(mtr_ctrl_serp1
 
 pico_add_extra_outputs(mtr_ctrl_serp1)
 
+# ************************************************************
+
+add_executable(mtr_ctrl_serp_alt1 mtr_ctrl_serp_alt1.c )
+
+pico_set_program_name(mtr_ctrl_serp_alt1 "mtr_ctrl_serp_alt1")
+pico_set_program_version(mtr_ctrl_serp_alt1 "0.1")
+
+# Generate PIO headers
+pico_generate_pio_header(mtr_ctrl_serp_alt1 ${CMAKE_CURRENT_LIST_DIR}/blink.pio)
+pico_generate_pio_header(mtr_ctrl_serp_alt1 ${CMAKE_CURRENT_LIST_DIR}/coil.pio)
+pico_generate_pio_header(mtr_ctrl_serp_alt1 ${CMAKE_CURRENT_LIST_DIR}/pin_watch.pio)
+
+# Modify the below lines to enable/disable output over UART/USB
+pico_enable_stdio_uart(mtr_ctrl_serp_alt1 1)
+pico_enable_stdio_usb(mtr_ctrl_serp_alt1 0)
+
+# Add the standard library to the build
+target_link_libraries(mtr_ctrl_serp_alt1
+        pico_stdlib)
+
+# Add the standard include files to the build
+target_include_directories(mtr_ctrl_serp_alt1 PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+)
+
+# Add any user requested libraries
+target_link_libraries(mtr_ctrl_serp_alt1 
+        hardware_dma
+        hardware_pio
+        )
+
+pico_add_extra_outputs(mtr_ctrl_serp_alt1)
