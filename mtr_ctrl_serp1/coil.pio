@@ -1,8 +1,8 @@
 ; send time then coil pin states to the TX FIFO in two words
 .program coil
     out y, 32           ; wait until first word recieved (pause time)
-    out x, 2            ; wait for second word and grab the first to pin states
+    out x, 2            ; wait for second word and grab the first two bits (pin states)
 countdown:
     jmp y--, countdown  ; pause for x time
     mov pins, x         ; set coil pins
-    move null, osr      ;get rid of the last 30 bits so new words can be recieved
+    in osr, 30          ; do I need to do this? just want to recive all 32 bits next time

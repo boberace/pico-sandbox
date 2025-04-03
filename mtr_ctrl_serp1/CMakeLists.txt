@@ -28,43 +28,43 @@ set(PICO_BOARD pico CACHE STRING "Board type")
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
 
-project(mtr_ctrl_serp1 C CXX ASM)
+project(mtr_ctrl_serp_alt1 C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(mtr_ctrl_serp1 mtr_ctrl_serp1.c )
+# add_executable(mtr_ctrl_serp1 mtr_ctrl_serp1.c )
 
-pico_set_program_name(mtr_ctrl_serp1 "mtr_ctrl_serp1")
-pico_set_program_version(mtr_ctrl_serp1 "0.1")
+# pico_set_program_name(mtr_ctrl_serp1 "mtr_ctrl_serp1")
+# pico_set_program_version(mtr_ctrl_serp1 "0.1")
 
-# Generate PIO headers
-pico_generate_pio_header(mtr_ctrl_serp1 ${CMAKE_CURRENT_LIST_DIR}/blink.pio)
-pico_generate_pio_header(mtr_ctrl_serp1 ${CMAKE_CURRENT_LIST_DIR}/pin_tic_counter.pio)
-pico_generate_pio_header(mtr_ctrl_serp1 ${CMAKE_CURRENT_LIST_DIR}/pin_watch.pio)
+# # Generate PIO headers
+# pico_generate_pio_header(mtr_ctrl_serp1 ${CMAKE_CURRENT_LIST_DIR}/blink.pio)
+# pico_generate_pio_header(mtr_ctrl_serp1 ${CMAKE_CURRENT_LIST_DIR}/pin_tic_counter.pio)
+# pico_generate_pio_header(mtr_ctrl_serp1 ${CMAKE_CURRENT_LIST_DIR}/pin_watch.pio)
 
-# Modify the below lines to enable/disable output over UART/USB
-pico_enable_stdio_uart(mtr_ctrl_serp1 1)
-pico_enable_stdio_usb(mtr_ctrl_serp1 0)
+# # Modify the below lines to enable/disable output over UART/USB
+# pico_enable_stdio_uart(mtr_ctrl_serp1 1)
+# pico_enable_stdio_usb(mtr_ctrl_serp1 0)
 
-# Add the standard library to the build
-target_link_libraries(mtr_ctrl_serp1
-        pico_stdlib)
+# # Add the standard library to the build
+# target_link_libraries(mtr_ctrl_serp1
+#         pico_stdlib)
 
-# Add the standard include files to the build
-target_include_directories(mtr_ctrl_serp1 PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}
-)
+# # Add the standard include files to the build
+# target_include_directories(mtr_ctrl_serp1 PRIVATE
+#         ${CMAKE_CURRENT_LIST_DIR}
+# )
 
-# Add any user requested libraries
-target_link_libraries(mtr_ctrl_serp1 
-        hardware_dma
-        hardware_pio
-        )
+# # Add any user requested libraries
+# target_link_libraries(mtr_ctrl_serp1 
+#         hardware_dma
+#         hardware_pio
+#         )
 
-pico_add_extra_outputs(mtr_ctrl_serp1)
+# pico_add_extra_outputs(mtr_ctrl_serp1)
 
 # ************************************************************
 
