@@ -95,6 +95,7 @@ target_include_directories(mtr_ctrl_serp_alt1 PRIVATE
 target_link_libraries(mtr_ctrl_serp_alt1 
         hardware_dma
         hardware_pio
+        hardware_pwm
         )
 
 pico_add_extra_outputs(mtr_ctrl_serp_alt1)

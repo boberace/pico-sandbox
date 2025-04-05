@@ -1,8 +1,11 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include "pico/stdlib.h"
 #include "hardware/clocks.h"
 #include "hardware/dma.h"
 #include "hardware/pio.h"
+#include "hardware/pwm.h"
+#include "math.h"
 
 #include "blink.pio.h"
 #include "pin_watch.pio.h"
@@ -20,11 +23,16 @@
 
 #define PIN_LED_LCEN 2
 #define PIN_LED_RBTW 3
-#define PIN_LED 25
+#define PIN_LED_A 4
+#define PIN_LED_B 5
+#define PIN_LED_BI 25
 
 #define NUM_STATOR_POLES 12
 
 #define FSYS clock_get_hz(clk_sys)
+
+uint coil_A_slice_num = 0;
+uint16_t coil_A_wrap = 100;
 
 PIO pio_pin_watch = pio1;
 uint sm_pin_watch = 0;
@@ -54,10 +62,12 @@ uint64_t prev_micros_rbtw = 0;
 uint64_t curr_micros_rbtw = 0;
 
 void blink_program_init(PIO pio, uint sm, uint offset, uint pin, float freq);
-void setup_motor();
-void coil_A(bool a, bool b);
+// void setup_motor();
+// void coil_A(bool a, bool b);
 void pin_watch_program_init(PIO pio, uint sm, uint offset, uint pin_watch, uint pin_led);
-void coil_program_init(PIO pio, uint sm, uint offset, uint base_pin);
+void coil_program_init(PIO pio, uint sm, uint offset, uint base_coil_pin, uint base_led_pin);
+void setup_coil_A_pwm();
+void coil_A_pwm(float value);
 
 void gpio_callback(uint gpio, uint32_t events) 
 {
@@ -65,33 +75,37 @@ void gpio_callback(uint gpio, uint32_t events)
         prev_micros_lcen = curr_micros_lcen;
         curr_micros_lcen = to_us_since_boot(get_absolute_time());
         uint32_t delta_micros_lcen = curr_micros_lcen - prev_micros_lcen;
+        uint32_t pause_micros = 10000; // delta_micros_lcen >> 1;
         if(events & GPIO_IRQ_EDGE_RISE) {
-            hall_lcen_tic_counter_rise = delta_micros_lcen;
+            hall_lcen_tic_counter_rise = delta_micros_lcen;            
             gpio_put(PIN_LED_LCEN, 1);
-            // pio_sm_put(pio_coil, sm_coil, delta_micros_lcen >> 1); // send 32 bits to the coil program
-            // pio_sm_put(pio_coil, sm_coil, 0); // send 32 bits to the coil program  
+            // pio_sm_put(pio_coil, sm_coil, pause_micros ); 
+            // pio_sm_put(pio_coil, sm_coil, 0); 
         } else if(events & GPIO_IRQ_EDGE_FALL) {
             hall_lcen_tic_counter_fall = delta_micros_lcen;
             gpio_put(PIN_LED_LCEN, 0);
-            // pio_sm_put(pio_coil, sm_coil, delta_micros_lcen >> 1); // send 32 bits to the coil program
-            // pio_sm_put(pio_coil, sm_coil, 0); // send 32 bits to the coil program  
+            // pio_sm_put(pio_coil, sm_coil, pause_micros); 
+            // pio_sm_put(pio_coil, sm_coil, 0);
         }
     } else if(gpio == PIN_HALL_RBTW) {
         prev_micros_rbtw = curr_micros_rbtw;
         curr_micros_rbtw = to_us_since_boot(get_absolute_time());
         uint32_t delta_micros_rbtw = curr_micros_rbtw - prev_micros_rbtw;
+        uint32_t pause_micros = delta_micros_rbtw >> 1;
         if(events & GPIO_IRQ_EDGE_RISE) {
             hall_rbtw_tic_counter_rise = delta_micros_rbtw;
             gpio_put(PIN_LED_RBTW, 1);
-            coil_A(!clockwise, clockwise);
-            // pio_sm_put(pio_coil, sm_coil, delta_micros_rbtw >> 1); // send 32 bits to the coil program
-            // pio_sm_put(pio_coil, sm_coil, 0b10); // send 32 bits to the coil program
+            coil_A_pwm(0.5); 
+            // coil_A(!clockwise, clockwise);
+            // pio_sm_put(pio_coil, sm_coil, pause_micros); 
+            // pio_sm_put(pio_coil, sm_coil, 0b10);
         } else if(events & GPIO_IRQ_EDGE_FALL) {
             hall_rbtw_tic_counter_fall = delta_micros_rbtw;
             gpio_put(PIN_LED_RBTW, 0);
-            coil_A(clockwise, !clockwise);     
-            // pio_sm_put(pio_coil, sm_coil, delta_micros_rbtw >> 1); // send 32 bits to the coil program
-            // pio_sm_put(pio_coil, sm_coil, 0b01); // send 32 bits to the coil program       
+            coil_A_pwm(-0.5); 
+            // coil_A(clockwise, !clockwise);     
+            // pio_sm_put(pio_coil, sm_coil, pause_micros); 
+            // pio_sm_put(pio_coil, sm_coil, 0b01);   
         }
     }
 }
@@ -110,7 +124,16 @@ int main()
     // uint offset = pio_add_program(pio_blink, &blink_program);
     // blink_program_init(pio_blink, sm_blink, offset, PIN_LED, 1.0f); // 1Hz    
 
-    setup_motor();           
+    // setup_motor();     
+    setup_coil_A_pwm();
+
+    gpio_init(PIN_LED_LCEN);
+    gpio_set_dir(PIN_LED_LCEN, GPIO_OUT);
+    gpio_put(PIN_LED_LCEN, 0);
+
+    gpio_init(PIN_LED_RBTW);
+    gpio_set_dir(PIN_LED_RBTW, GPIO_OUT);
+    gpio_put(PIN_LED_RBTW, 0);      
 
     gpio_init(PIN_HALL_LCEN);
     gpio_set_irq_enabled_with_callback(PIN_HALL_LCEN, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &gpio_callback);
@@ -119,7 +142,7 @@ int main()
     gpio_set_irq_enabled_with_callback(PIN_HALL_RBTW, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &gpio_callback);
 
     // uint offset_coil = pio_add_program(pio_coil, &coil_program);
-    // coil_program_init(pio_coil, sm_coil, offset_coil, PIN_CA2); 
+    // coil_program_init(pio_coil, sm_coil, offset_coil, PIN_CA2, PIN_LED_A); 
 
     uint32_t prev_millis_display = to_ms_since_boot(get_absolute_time());
     uint32_t curr_millis_display = to_ms_since_boot(get_absolute_time());   
@@ -129,7 +152,7 @@ int main()
         curr_millis_display = to_ms_since_boot(get_absolute_time());
         if( curr_millis_display - prev_millis_display > 1000){
             prev_millis_display = curr_millis_display;            
-            printf("lcen: rise %d, fall %d <> rbtw: rise %d, fall %d\n", hall_lcen_tic_counter_rise, hall_lcen_tic_counter_fall, hall_rbtw_tic_counter_rise, hall_rbtw_tic_counter_fall);
+            printf("lcen: rise ,%d, fall ,%d, <> rbtw: rise ,%d, fall ,%d\n", hall_lcen_tic_counter_rise, hall_lcen_tic_counter_fall, hall_rbtw_tic_counter_rise, hall_rbtw_tic_counter_fall);
         }
     }
 
@@ -149,32 +172,51 @@ void blink_program_init(PIO pio, uint sm, uint offset, uint pin, float freq)
  }
 
 
-void setup_motor() {
-    gpio_init(PIN_CA1);
-    gpio_set_dir(PIN_CA1, GPIO_OUT);
-    gpio_put(PIN_CA1, 0);
+// void setup_motor() 
+// {
+//     gpio_init(PIN_CA1);
+//     gpio_set_dir(PIN_CA1, GPIO_OUT);
+//     gpio_put(PIN_CA1, 0);
 
-    gpio_init(PIN_CA2);
-    gpio_set_dir(PIN_CA2, GPIO_OUT);
-    gpio_put(PIN_CA2, 0);
+//     gpio_init(PIN_CA2);
+//     gpio_set_dir(PIN_CA2, GPIO_OUT);
+//     gpio_put(PIN_CA2, 0);
 
-    gpio_init(PIN_LED_LCEN);
-    gpio_set_dir(PIN_LED_LCEN, GPIO_OUT);
-    gpio_put(PIN_LED_LCEN, 0);
+//     gpio_init(PIN_MTR_ENA);
+//     gpio_set_dir(PIN_MTR_ENA, GPIO_OUT);
+//     gpio_put(PIN_MTR_ENA, 1);
 
-    gpio_init(PIN_LED_RBTW);
-    gpio_set_dir(PIN_LED_RBTW, GPIO_OUT);
-    gpio_put(PIN_LED_RBTW, 0);
-
-    gpio_init(PIN_MTR_ENA);
-    gpio_set_dir(PIN_MTR_ENA, GPIO_OUT);
-    gpio_put(PIN_MTR_ENA, 1);
+// }
+// void coil_A(bool a, bool b)
+// {
+//     uint32_t mask = (1 << PIN_CA1) | (1 << PIN_CA2); // Mask for PIN_CA1 and PIN_CA2
+//     uint32_t value = (a << PIN_CA1) | (b << PIN_CA2); // Set values for PIN_CA1 and PIN_CA2
+//     gpio_put_masked(mask, value);
+// }
+void coil_A_pwm(float value) 
+{
+    uint16_t value_int = (uint16_t)(fabs(value) * coil_A_wrap);
+    if(value > -1 && value < 0) {
+        pwm_set_chan_level(coil_A_slice_num, PWM_CHAN_A, value_int);
+        pwm_set_chan_level(coil_A_slice_num, PWM_CHAN_B, 0);
+    } else if(value > 0 && value < 1) {
+        pwm_set_chan_level(coil_A_slice_num, PWM_CHAN_A, 0);
+        pwm_set_chan_level(coil_A_slice_num, PWM_CHAN_B, value_int);
+    } else {
+        pwm_set_chan_level(coil_A_slice_num, PWM_CHAN_A, 0);
+        pwm_set_chan_level(coil_A_slice_num, PWM_CHAN_B, 0);
+    }
 
 }
-void coil_A(bool a, bool b){
-    uint32_t mask = (1 << PIN_CA1) | (1 << PIN_CA2); // Mask for PIN_CA1 and PIN_CA2
-    uint32_t value = (a << PIN_CA1) | (b << PIN_CA2); // Set values for PIN_CA1 and PIN_CA2
-    gpio_put_masked(mask, value);
+void setup_coil_A_pwm() 
+{
+    gpio_set_function(PIN_CA1, GPIO_FUNC_PWM);
+    gpio_set_function(PIN_CA2, GPIO_FUNC_PWM);
+    coil_A_slice_num = pwm_gpio_to_slice_num(PIN_CA2);
+    pwm_set_wrap(coil_A_slice_num, coil_A_wrap);
+    float clkdiv = ((float)FSYS / 1000000.0); 
+    pwm_set_clkdiv(coil_A_slice_num, clkdiv); 
+    pwm_set_enabled(coil_A_slice_num, true);   
 }
 
 void pin_watch_program_init(PIO pio, uint sm, uint offset, uint pin_watch, uint pin_led) 
@@ -204,17 +246,22 @@ void pin_watch_program_init(PIO pio, uint sm, uint offset, uint pin_watch, uint 
     
 }
 
-void coil_program_init(PIO pio, uint sm, uint offset, uint base_pin) 
+void coil_program_init(PIO pio, uint sm, uint offset, uint base_coil_pin, uint base_led_pin) 
 {
+
+    pio_gpio_init(pio, base_coil_pin);
+    pio_gpio_init(pio, base_coil_pin + 1);
+
+    pio_gpio_init(pio, base_led_pin);
+
+    pio_sm_set_consecutive_pindirs(pio, sm, base_coil_pin, 2, true);
+    pio_sm_set_consecutive_pindirs(pio, sm, base_led_pin, 1, true);
+
     pio_sm_config c = coil_program_get_default_config(offset);
  
-    sm_config_set_out_pins(&c, base_pin , 2);
- 
-    pio_sm_set_consecutive_pindirs(pio, sm, base_pin, 2, false);
- 
-    pio_gpio_init(pio, base_pin);
-    pio_gpio_init(pio, base_pin + 1);
- 
+    sm_config_set_out_pins(&c, base_coil_pin, 2);
+    sm_config_set_sideset_pins(&c, base_led_pin);
+
     sm_config_set_out_shift(&c, false, true, 32); 
  
     float clkdiv = ((float)FSYS / 1000000.0); 
