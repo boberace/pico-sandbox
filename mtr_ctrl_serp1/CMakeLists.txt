@@ -70,7 +70,8 @@ pico_sdk_init()
 
 add_executable(mtr_ctrl_serp_alt1 
     mtr_ctrl_serp_alt1.c
-    pid.c 
+    pid.c
+    ssd1306.c
     )
 
 pico_set_program_name(mtr_ctrl_serp_alt1 "mtr_ctrl_serp_alt1")
@@ -80,6 +81,7 @@ pico_set_program_version(mtr_ctrl_serp_alt1 "0.1")
 pico_generate_pio_header(mtr_ctrl_serp_alt1 ${CMAKE_CURRENT_LIST_DIR}/blink.pio)
 pico_generate_pio_header(mtr_ctrl_serp_alt1 ${CMAKE_CURRENT_LIST_DIR}/coil.pio)
 pico_generate_pio_header(mtr_ctrl_serp_alt1 ${CMAKE_CURRENT_LIST_DIR}/pin_watch.pio)
+pico_generate_pio_header(mtr_ctrl_serp_alt1 ${CMAKE_CURRENT_LIST_DIR}/quadrature_encoder.pio)
 
 # Modify the below lines to enable/disable output over UART/USB
 pico_enable_stdio_uart(mtr_ctrl_serp_alt1 1)
@@ -99,6 +101,7 @@ target_link_libraries(mtr_ctrl_serp_alt1
         hardware_dma
         hardware_pio
         hardware_pwm
+        hardware_i2c
         )
 
 pico_add_extra_outputs(mtr_ctrl_serp_alt1)
