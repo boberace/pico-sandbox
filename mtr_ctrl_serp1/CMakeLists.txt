@@ -68,7 +68,10 @@ pico_sdk_init()
 
 # ************************************************************
 
-add_executable(mtr_ctrl_serp_alt1 mtr_ctrl_serp_alt1.c )
+add_executable(mtr_ctrl_serp_alt1 
+    mtr_ctrl_serp_alt1.c
+    pid.c 
+    )
 
 pico_set_program_name(mtr_ctrl_serp_alt1 "mtr_ctrl_serp_alt1")
 pico_set_program_version(mtr_ctrl_serp_alt1 "0.1")
