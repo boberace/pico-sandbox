@@ -17,7 +17,7 @@
 #endif
 
 #undef PICO_DEFAULT_LED_PIN
-#define PICO_DEFAULT_LED_PIN 17 
+#define PICO_DEFAULT_LED_PIN 25
 
 // Perform initialisation
 int pico_led_init(void) {
@@ -49,12 +49,12 @@ int main() {
     hard_assert(rc == PICO_OK);
     while (true) {
         pico_set_led(true);
-        sleep_ms(10);
+        sleep_ms(100);
         pico_set_led(false);
-        sleep_ms(10);
-        // pico_set_led(true);
-        // sleep_ms(100);
-        // pico_set_led(false);
-        // sleep_ms(700);
+        sleep_ms(100);
+        pico_set_led(true);
+        sleep_ms(100);
+        pico_set_led(false);
+        sleep_ms(700);
     }
 }
