@@ -36,6 +36,8 @@ bi_decl(bi_3pins_with_names(PICO_AUDIO_I2S_DATA_PIN, "I2S DIN", PICO_AUDIO_I2S_C
 
 static int16_t sine_wave_table[SINE_WAVE_TABLE_LEN];
 
+const struct audio_format *output_format;
+
 struct audio_buffer_pool *init_audio() {
 
     static audio_format_t audio_format = {
@@ -56,7 +58,7 @@ struct audio_buffer_pool *init_audio() {
     struct audio_buffer_pool *producer_pool = audio_new_producer_pool(&producer_format, 3,
                                                                       SAMPLES_PER_BUFFER); // todo correct size
     bool __unused ok;
-    const struct audio_format *output_format;
+    // const struct audio_format *output_format;
 #if USE_AUDIO_I2S
     struct audio_i2s_config config = {
             .data_pin = PICO_AUDIO_I2S_DATA_PIN,
@@ -68,6 +70,9 @@ struct audio_buffer_pool *init_audio() {
     output_format = audio_i2s_setup(&audio_format, &config);
     if (!output_format) {
         panic("PicoAudio: Unable to open audio device.\n");
+    } else {
+        printf("I2S: sample rate %u, channels %u\n", output_format->sample_freq,
+               output_format->channel_count);
     }
 
     ok = audio_i2s_connect(producer_pool);
@@ -102,6 +107,9 @@ int main() {
 #endif
 
     stdio_init_all();
+    sleep_ms(2000); // wait for usb serial to connect
+    printf("\nSine wave generator\n");   
+
 
     for (int i = 0; i < SINE_WAVE_TABLE_LEN; i++) {
         sine_wave_table[i] = 32767 * cosf(i * 2 * (float) (M_PI / SINE_WAVE_TABLE_LEN));
@@ -113,6 +121,7 @@ int main() {
     uint32_t pos_max = 0x10000 * SINE_WAVE_TABLE_LEN;
     uint vol = 128;
     while (true) {
+
 #if USE_AUDIO_PWM
         enum audio_correction_mode m = audio_pwm_get_correction_mode();
 #endif

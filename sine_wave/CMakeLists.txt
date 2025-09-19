@@ -23,7 +23,7 @@ if (EXISTS ${picoVscode})
     include(${picoVscode})
 endif()
 # ====================================================================================
-set(PICO_BOARD pico CACHE STRING "Board type")
+set(PICO_BOARD pico2 CACHE STRING "Board type")
 
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
@@ -52,14 +52,17 @@ if (TARGET pico_audio_i2s)
             PICO_AUDIO_I2S_MONO_INPUT=1
             #define for our example code
             USE_AUDIO_I2S=1
-#            PICO_AUDIO_I2S_DATA_PIN=22
-#            PICO_AUDIO_I2S_CLOCK_PIN_BASE=23
+            PICO_AUDIO_I2S_DATA_PIN=28
+            PICO_AUDIO_I2S_CLOCK_PIN_BASE=26
 #            PICO_DEFAULT_UART=0
 #            PICO_DEFAULT_UART_TX_PIN=28
 #            PICO_DEFAULT_UART_RX_PIN=29
             )
     # create map/bin/hex file etc.
     pico_add_extra_outputs(sine_wave_i2s)
+    pico_enable_stdio_uart(sine_wave_i2s 1)
+    pico_enable_stdio_usb(sine_wave_i2s 1)
+
 endif ()
 
 # only build PWM example if library is available
