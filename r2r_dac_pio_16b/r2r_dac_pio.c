@@ -10,16 +10,16 @@
 
 #define system_frequency clock_get_hz(clk_sys)
 
-#define R2R_BITS 8
-#define PIN_R2R_BASE 0 // 11-15 also used
+#define R2R_BITS 10
+#define PIN_R2R_BASE 0 
 #define R2R_MAX ((1 << R2R_BITS) - 1)
 #define NUM_WAV_SAMPLES (1 << R2R_BITS)
 
 PIO pio_r2r = pio1;
 uint sm_r2r = 0;
 
-volatile uint8_t fun_wave[NUM_WAV_SAMPLES];
-volatile uint8_t * p_fun_wave = &fun_wave[0];
+volatile uint16_t fun_wave[NUM_WAV_SAMPLES];
+volatile uint16_t * p_fun_wave = &fun_wave[0];
 
 int dma_chan_wave_bytes;
 int dma_chan_wave_loop;
@@ -36,7 +36,7 @@ int main()
     stdio_init_all();
 
     setup_waves();  
-    setup_r2r(100.0);
+    setup_r2r(20000.0);
 
     setup_dma_wave();
 
@@ -77,8 +77,8 @@ void blink_pin_forever(PIO pio, uint sm, uint offset, uint pin, uint freq)
 void setup_waves() 
 { // =ROUND(63*(SIN(A1*2*PI()/256)/2+0.5),0)
     for (int i = 0; i < NUM_WAV_SAMPLES; i++) {
-        fun_wave[i] = (uint8_t)round(R2R_MAX * (sin(i * 2 * M_PI / NUM_WAV_SAMPLES) / 2 + 0.5));
-        //  fun_wave[i] = i;
+        fun_wave[i] = (uint16_t)round(R2R_MAX * (sin(i * 2 * M_PI / NUM_WAV_SAMPLES) / 2 + 0.5));
+        // fun_wave[i] = i;
     }
 }
 
@@ -86,7 +86,7 @@ void r2r_program_init(PIO pio, uint sm, uint offset, uint base_pin, uint num_pin
 {
     pio_sm_config c = r2r_program_get_default_config(offset);
     sm_config_set_out_pins(&c, base_pin, num_pins); 
-    sm_config_set_out_shift(&c, true, true, 8); 
+    sm_config_set_out_shift(&c, true, true, 16); 
     for(int i = 0; i < num_pins; i++) {
         pio_gpio_init(pio, base_pin + i);
     }
@@ -120,7 +120,7 @@ void setup_dma_wave()
     channel_config_set_write_increment(&c_wave, false);
     channel_config_set_dreq(&c_wave, pio_r2r_dreq);
     channel_config_set_chain_to(&c_wave, dma_chan_wave_loop);
-    channel_config_set_transfer_data_size(&c_wave, DMA_SIZE_8);
+    channel_config_set_transfer_data_size(&c_wave, DMA_SIZE_16);
     channel_config_set_irq_quiet(&c_wave, false);
     dma_channel_configure(
         dma_chan_wave_bytes, 
