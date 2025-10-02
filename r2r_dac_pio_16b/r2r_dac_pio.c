@@ -36,7 +36,7 @@ int main()
     stdio_init_all();
 
     setup_waves();  
-    setup_r2r(20000.0);
+    setup_r2r(2000.0);
 
     setup_dma_wave();
 

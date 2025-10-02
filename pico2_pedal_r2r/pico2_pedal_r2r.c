@@ -16,7 +16,7 @@
 #define R2R_BITS 10
 #define PIN_R2R_BASE 0 
 #define R2R_MAX ((1 << R2R_BITS) - 1)
-#define NUM_LOOP_SAMPLES (1 << 16)
+#define NUM_LOOP_SAMPLES 500//(1 << 17)
 
 PIO pio_r2r = pio1;
 uint sm_r2r = 0;
@@ -95,7 +95,6 @@ void setup_r2r()
 
 }
 
-
 void setup_sampling_loop(){
 
     adc_gpio_init(26 + CAPTURE_CHANNEL);
@@ -109,7 +108,7 @@ void setup_sampling_loop(){
         true    // Shift each sample to 8 bits when pushing to FIFO
     );
 
-    adc_set_clkdiv(48000000/96/50000); // 50khz
+    adc_set_clkdiv(10); // 50khz
 
     int dma_chan_adc_data = dma_claim_unused_channel(true); 
     int dma_chan_adc_loop = dma_claim_unused_channel(true);
@@ -123,7 +122,7 @@ void setup_sampling_loop(){
     channel_config_set_dreq(&c_adc_data, DREQ_ADC);
     channel_config_set_chain_to(&c_adc_data, dma_chan_adc_loop);
     channel_config_set_transfer_data_size(&c_adc_data, DMA_SIZE_8);
-    channel_config_set_irq_quiet(&c_adc_data, false);
+    channel_config_set_irq_quiet(&c_adc_data, true);
     dma_channel_configure(
         dma_chan_adc_data, // channel – DMA channel
         &c_adc_data, // config – Pointer to DMA config structure
@@ -137,24 +136,20 @@ void setup_sampling_loop(){
     channel_config_set_write_increment(&c_adc_loop, false);
     channel_config_set_chain_to(&c_adc_loop, dma_chan_adc_data);
     channel_config_set_transfer_data_size(&c_adc_loop, DMA_SIZE_32);
-    channel_config_set_irq_quiet(&c_adc_loop, false);
+    channel_config_set_irq_quiet(&c_adc_loop, true);
     dma_channel_configure(
         dma_chan_adc_loop, // channel – DMA channel
         &c_adc_loop, // config – Pointer to DMA config structure
         &dma_hw->ch[dma_chan_adc_data].write_addr,  // write_addr – Initial write address
         &p_fun_wave, // read_addr – Initial read address 
         1,  // encoded_transfer_count – The encoded transfer count
-        true // trigger – True to start the transfer immediately
+        false // trigger – True to start the transfer immediately
     );  
     
-    printf("Starting capture\n");
-    adc_run(true);
-
-    // sleep_ms(1);
 
     int dma_chan_dac_data = dma_claim_unused_channel(true); 
     int dma_chan_dac_loop = dma_claim_unused_channel(true);
-
+    
     dma_channel_config c_dac_data = dma_channel_get_default_config(dma_chan_dac_data);
     dma_channel_config c_dac_loop = dma_channel_get_default_config(dma_chan_dac_loop);
   
@@ -164,13 +159,13 @@ void setup_sampling_loop(){
     channel_config_set_dreq(&c_dac_data, DREQ_ADC); 
     channel_config_set_chain_to(&c_dac_data, dma_chan_dac_loop);
     channel_config_set_transfer_data_size(&c_dac_data, DMA_SIZE_8);
-    channel_config_set_irq_quiet(&c_dac_data, false);
+    channel_config_set_irq_quiet(&c_dac_data, true);
     dma_channel_configure(
         dma_chan_dac_data, // channel – DMA channel
         &c_dac_data, // config – Pointer to DMA config structure
         &pio1_hw->txf[sm_r2r],  // write_addr – Initial write address
         NULL, // read_addr – Initial read address - loop channel fills this in
-        NUM_LOOP_SAMPLES,  // encoded_transfer_count – The encoded transfer count
+        NUM_LOOP_SAMPLES,  // encoded_transfer_count – The encoded transfer count NUM_LOOP_SAMPLES
         false // trigger – True to start the transfer immediately
     );
 
@@ -178,15 +173,21 @@ void setup_sampling_loop(){
     channel_config_set_write_increment(&c_dac_loop, false);
     channel_config_set_chain_to(&c_dac_loop, dma_chan_dac_data);
     channel_config_set_transfer_data_size(&c_dac_loop, DMA_SIZE_32);
-    channel_config_set_irq_quiet(&c_dac_loop, false);
+    channel_config_set_irq_quiet(&c_dac_loop, true);
     dma_channel_configure(
         dma_chan_dac_loop, // channel – DMA channel
         &c_dac_loop, // config – Pointer to DMA config structure
         &dma_hw->ch[dma_chan_dac_data].read_addr,  // write_addr – Initial write address
         &p_fun_wave, // read_addr – Initial read address 
         1,  // encoded_transfer_count – The encoded transfer count
-        true // trigger – True to start the transfer immediately
+        false // trigger – True to start the transfer immediately
     );
 
+    printf("Starting capture\n");
+    adc_run(true);
+    // dma_start_channel_mask(1u << dma_chan_dac_loop || 1u << dma_chan_adc_loop);   //dma_chan_dac_loop, dma_chan_adc_loop
+    dma_start_channel_mask(1u << dma_chan_dac_loop);    //dma_chan_dac_loop
+    dma_start_channel_mask(1u << dma_chan_adc_loop);   //dma_chan_adc_loop
+       
 
 }
