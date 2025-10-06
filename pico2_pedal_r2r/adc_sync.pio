@@ -1,0 +1,3 @@
+.program adc_sync
+    out pins, 1
+
