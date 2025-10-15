@@ -17,11 +17,14 @@
 #define R2R_MAX ((1 << R2R_BITS) - 1)
 #define NUM_FRAME_SAMPLES 256
 #define NUM_FRAMES 1024
+uint frame_index = 0;
 #define NUM_LOOP_SAMPLES NUM_FRAME_SAMPLES * NUM_FRAMES
 #define ADC_FREQ 24000  
 
 #define PIN_TEST 15
 #define TOGGLE_PIN(a) gpio_xor_mask(1u << a)
+
+bool dac_dma_started = false;
 
 int dma_chan_adc_data, dma_chan_adc_loop;
 
@@ -107,11 +110,10 @@ void setup_sampling_loop()
         false // trigger – True to start the transfer immediately
     );  
     
-
     printf("Starting capture\n");
     adc_run(true);
     // todo: run DAC of sync pulse to control latency
-    dma_start_channel_mask(1u << dma_chan_adc_loop);    //dma_chan_dac_loop
+    dma_start_channel_mask(1u << dma_chan_adc_loop); 
     sleep_us(1);
     printf("Capture started\n");
 
@@ -124,9 +126,17 @@ void adc_dma_handler() {
         dma_hw->ints0 = (1u << dma_chan_adc_data);
 
         TOGGLE_PIN(PIN_TEST);
+        memcpy(loop_wave[frame_index * NUM_FRAME_SAMPLES], frame_wave[0], NUM_FRAME_SAMPLES);
+        frame_index++;
+        frame_index%=NUM_FRAMES;
 
-        // Set the flag to indicate completion
-        // dma_finished = true;
+        //processing must be deterministic so subsequent frames align
+
+        if (!dac_dma_started) {
+            // start DAC DMA here
+            dac_dma_started = true;
+        }      
+
     }
 }
 
