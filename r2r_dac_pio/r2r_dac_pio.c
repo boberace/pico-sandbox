@@ -11,7 +11,7 @@
 #define system_frequency clock_get_hz(clk_sys)
 
 #define R2R_BITS 8
-#define PIN_R2R_BASE 0 // 11-15 also used
+#define PIN_R2R_BASE 0 
 #define R2R_MAX ((1 << R2R_BITS) - 1)
 #define NUM_WAV_SAMPLES (1 << R2R_BITS)
 
@@ -36,7 +36,7 @@ int main()
     stdio_init_all();
 
     setup_waves();  
-    setup_r2r(100.0);
+    setup_r2r(2000.0);
 
     setup_dma_wave();
 
@@ -86,7 +86,7 @@ void r2r_program_init(PIO pio, uint sm, uint offset, uint base_pin, uint num_pin
 {
     pio_sm_config c = r2r_program_get_default_config(offset);
     sm_config_set_out_pins(&c, base_pin, num_pins); 
-    sm_config_set_out_shift(&c, true, true, 8); 
+    sm_config_set_out_shift(&c, false, true, 8); 
     for(int i = 0; i < num_pins; i++) {
         pio_gpio_init(pio, base_pin + i);
     }
