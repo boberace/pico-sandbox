@@ -28,6 +28,8 @@ set(PICO_BOARD pico2 CACHE STRING "Board type")
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
 
+set(HOME $ENV{HOME})
+
 project(pico2_pedal_r2r C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
@@ -47,8 +49,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
 )
 
 # Generate PIO header
-# pico_generate_pio_header(${PROJECT_NAME} ${CMAKE_CURRENT_LIST_DIR}/r2r.pio)
-# pico_generate_pio_header(${PROJECT_NAME} ${CMAKE_CURRENT_LIST_DIR}/adc_sync.pio)
+pico_generate_pio_header(${PROJECT_NAME} ${CMAKE_CURRENT_LIST_DIR}/r2r.pio)
 
 # Modify the below lines to enable/disable output over UART/USB
 pico_enable_stdio_uart(${PROJECT_NAME} 1)
@@ -61,14 +62,20 @@ target_link_libraries(${PROJECT_NAME}
 # Add the standard include files to the build
 target_include_directories(${PROJECT_NAME} PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
+        ${HOME}/pico/CMSISDSP/CMSIS-DSP/Include
+        ${HOME}/pico/CMSISDSP/CMSIS_6/CMSIS/Core/Include
 )
 
 # Add any user requested libraries
 target_link_libraries(${PROJECT_NAME} 
-        # hardware_pio
+        hardware_pio
         hardware_dma
         hardware_adc
+        ${HOME}/pico/CMSISDSP/build/bin_dsp/libCMSISDSP.a
         )
 
 pico_add_extra_outputs(${PROJECT_NAME})
+
+add_compile_options(-Ofast)
+
 
