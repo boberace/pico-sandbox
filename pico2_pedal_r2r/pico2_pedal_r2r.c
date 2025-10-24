@@ -9,6 +9,7 @@
 #include "hardware/adc.h"
 
 #include "arm_math.h"
+// #include "math_helper.h"
 
 #include "r2r.pio.h"
 
@@ -20,15 +21,23 @@
 #define PIN_R2R_BASE 0 
 #define R2R_MAX ((1 << R2R_BITS) - 1)
 #define NUM_FRAME_SAMPLES 256
-#define NUM_FRAMES 1024
+#define NUM_FRAMES 256
 uint frame_index = 0;
 #define NUM_LOOP_SAMPLES NUM_FRAME_SAMPLES * NUM_FRAMES
 #define ADC_FREQ 24000  
 
 #define PIN_TEST 15
-#define TOGGLE_PIN(a) gpio_xor_mask(1u << a)
+#define TGL_PIN(a) gpio_xor_mask(1u << a)
 #define SET_PIN(a) gpio_put(a, 1)
 #define CLR_PIN(a) gpio_put(a, 0)
+
+#define NUM_FFT_SAMPLES NUM_FRAME_SAMPLES
+
+arm_status status; 
+arm_rfft_fast_instance_f32 rfft;  
+
+float fft_input[NUM_FFT_SAMPLES];
+float fft_output[NUM_FFT_SAMPLES];
 
 bool dac_dma_started = false;
 
@@ -43,14 +52,16 @@ uint8_t * p_loop_wave = &loop_wave[0];
 PIO pio_r2r = pio1;
 uint sm_r2r = 0;
 
+void adc_dma_handler();
 void r2r_program_init(PIO pio, uint sm, uint offset, uint base_pin, uint num_pins);
 void setup_r2r();
 void setup_sampling_loop();
-void adc_dma_handler();
+
 
 int main()
 {
     stdio_init_all();
+
 
     gpio_init(PIN_TEST);
     gpio_set_dir(PIN_TEST, GPIO_OUT);
@@ -59,11 +70,46 @@ int main()
     setup_sampling_loop();
     uint count = 0;
 
+    arm_rfft_fast_init_f32(&rfft, NUM_FFT_SAMPLES);
+
     while (true) {
         printf("%d, system freq %d\n", count, system_frequency);
         count++;
         sleep_ms(1000);
     }
+}
+
+void adc_dma_handler() {
+    // Check if the DMA channel triggered the interrupt
+    if (dma_hw->ints0 & (1u << dma_chan_adc_data)) {
+        // Acknowledge the interrupt by clearing the flag
+        dma_hw->ints0 = (1u << dma_chan_adc_data);
+        SET_PIN(PIN_TEST);
+        // TGL_PIN(PIN_TEST);
+
+        for(int i = 0; i < NUM_FRAME_SAMPLES; i++) {
+            fft_input[i] = (float)frame_wave[i]/255.0f * 2.0f - 1.0f; // Normalize to -1.0 to 1.0
+        }
+
+        arm_rfft_fast_f32(&rfft, fft_input, fft_output, 0);
+        //
+        arm_rfft_fast_f32(&rfft, fft_output, fft_input, 1);
+
+        for(int i = 0; i < NUM_FRAME_SAMPLES; i++) {
+            loop_wave[ i + frame_index*NUM_FRAME_SAMPLES] = (uint8_t)(fft_input[i]*255.0f / 2.0f + 128.0f);
+        }
+
+        // memcpy(loop_wave + frame_index * NUM_FRAME_SAMPLES, frame_wave, NUM_FRAME_SAMPLES);
+        frame_index++;
+        frame_index%=NUM_FRAMES;
+
+        CLR_PIN(PIN_TEST);
+        if (!dac_dma_started) {
+            dma_start_channel_mask(1u << dma_chan_dac_loop);
+            dac_dma_started = true;
+        }      
+    }
+
 }
 
 void r2r_program_init(PIO pio, uint sm, uint offset, uint base_pin, uint num_pins) 
@@ -189,25 +235,5 @@ void setup_sampling_loop()
 
 }
 
-void adc_dma_handler() {
-    // Check if the DMA channel triggered the interrupt
-    if (dma_hw->ints0 & (1u << dma_chan_adc_data)) {
-        // Acknowledge the interrupt by clearing the flag
-        dma_hw->ints0 = (1u << dma_chan_adc_data);
-        SET_PIN(PIN_TEST);
-        // TOGGLE_PIN(PIN_TEST);
-        memcpy(loop_wave + frame_index * NUM_FRAME_SAMPLES, frame_wave, NUM_FRAME_SAMPLES);
-        frame_index++;
-        frame_index%=NUM_FRAMES;
 
-        //processing must be deterministic so subsequent frames align
-
-        CLR_PIN(PIN_TEST);
-        if (!dac_dma_started) {
-            dma_start_channel_mask(1u << dma_chan_dac_loop);
-            dac_dma_started = true;
-        }      
-    }
-
-}
 

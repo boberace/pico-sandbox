@@ -15,9 +15,9 @@ if(WIN32)
 else()
     set(USERHOME $ENV{HOME})
 endif()
-set(sdkVersion 2.1.1)
+set(sdkVersion 2.2.0)
 set(toolchainVersion 14_2_Rel1)
-set(picotoolVersion 2.1.1)
+set(picotoolVersion 2.2.0-a4)
 set(picoVscode ${USERHOME}/.pico-sdk/cmake/pico-vscode.cmake)
 if (EXISTS ${picoVscode})
     include(${picoVscode})
@@ -28,52 +28,45 @@ set(PICO_BOARD pico2 CACHE STRING "Board type")
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
 
-project(pico2_pedal_r2r C CXX ASM)
+project(arm_conv_example C CXX ASM)
+
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(${PROJECT_NAME} ${PROJECT_NAME}.c )
+add_executable(arm_conv_example 
+    arm_conv_example.c 
+    ${USERHOME}/pico/CMSISDSP/CMSIS-DSP/Examples/ARM/arm_convolution_example/math_helper.c
+    )
 
-pico_set_program_name(${PROJECT_NAME} "${PROJECT_NAME}")
-pico_set_program_version(${PROJECT_NAME} "0.1")
+pico_set_program_name(arm_conv_example "arm_conv_example")
+pico_set_program_version(arm_conv_example "0.1")
 
-target_compile_definitions(${PROJECT_NAME} PRIVATE
+# Modify the below lines to enable/disable output over UART/USB
+pico_enable_stdio_uart(arm_conv_example 1)
+pico_enable_stdio_usb(arm_conv_example 0)
+
+# Add the standard library to the build
+target_link_libraries(arm_conv_example
+        pico_stdlib
+        ${USERHOME}/pico/CMSISDSP/build/bin_dsp/libCMSISDSP.a
+        )
+
+# Add the standard include files to the build
+target_include_directories(arm_conv_example PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${USERHOME}/pico/CMSISDSP/CMSIS-DSP/Include
+        ${USERHOME}/pico/CMSISDSP/CMSIS_6/CMSIS/Core/Include
+        ${USERHOME}/pico/CMSISDSP/CMSIS-DSP/Examples/ARM/arm_convolution_example
+)
+
+target_compile_definitions(arm_conv_example PRIVATE
     PICO_DEFAULT_UART=0
     PICO_DEFAULT_UART_TX_PIN=12
     PICO_DEFAULT_UART_RX_PIN=13
 )
 
-# Generate PIO header
-pico_generate_pio_header(${PROJECT_NAME} ${CMAKE_CURRENT_LIST_DIR}/r2r.pio)
-
-# Modify the below lines to enable/disable output over UART/USB
-pico_enable_stdio_uart(${PROJECT_NAME} 1)
-pico_enable_stdio_usb(${PROJECT_NAME} 0)
-
-# Add the standard library to the build
-target_link_libraries(${PROJECT_NAME}
-        pico_stdlib)
-
-# Add the standard include files to the build
-target_include_directories(${PROJECT_NAME} PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}
-        ${USERHOME}/pico/CMSISDSP/CMSIS-DSP/Include
-        ${USERHOME}/pico/CMSISDSP/CMSIS_6/CMSIS/Core/Include
-)
-
-# Add any user requested libraries
-target_link_libraries(${PROJECT_NAME} 
-        hardware_pio
-        hardware_dma
-        hardware_adc
-        ${USERHOME}/pico/CMSISDSP/build/bin_dsp/libCMSISDSP.a
-        )
-
-pico_add_extra_outputs(${PROJECT_NAME})
-
-add_compile_options(-Ofast)
-
+pico_add_extra_outputs(arm_conv_example)
 

@@ -68,7 +68,8 @@ endif ()
 # only build PWM example if library is available
 if (TARGET pico_audio_pwm)
     add_executable(sine_wave_pwm
-            sine_wave.c
+        #     sine_wave.c
+                sine_wave_pwm_mono.c
             )
 
     target_link_libraries(sine_wave_pwm PRIVATE
@@ -87,7 +88,7 @@ if (TARGET pico_audio_pwm)
     # create map/bin/hex file etc.
     pico_add_extra_outputs(sine_wave_pwm)
     pico_enable_stdio_uart(sine_wave_pwm 1)
-    pico_enable_stdio_usb(sine_wave_pwm 1)
+    pico_enable_stdio_usb(sine_wave_pwm 0)
 
 endif ()
 
