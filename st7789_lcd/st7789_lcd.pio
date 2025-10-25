@@ -1,0 +1,20 @@
+;
+; Copyright (c) 2020 Raspberry Pi (Trading) Ltd.
+;
+; SPDX-License-Identifier: BSD-3-Clause
+;
+.pio_version 0 // only requires PIO version 0
+
+.program st7789_lcd
+.side_set 1
+
+; This is just a simple clocked serial TX. At 125 MHz system clock we can
+; sustain up to 62.5 Mbps.
+; Data on OUT pin 0
+; Clock on side-set pin 0
+
+.wrap_target
+    out pins, 1   side 0 ; stall here if no data (clock low)
+    nop           side 1
+.wrap
+

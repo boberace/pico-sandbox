@@ -41,8 +41,8 @@ pico_set_program_name(h25 "h25")
 pico_set_program_version(h25 "0.1")
 
 # Modify the below lines to enable/disable output over UART/USB
-pico_enable_stdio_uart(h25 0)
-pico_enable_stdio_usb(h25 1)
+pico_enable_stdio_uart(h25 1)
+pico_enable_stdio_usb(h25 0)
 
 # Add the standard library to the build
 target_link_libraries(h25
@@ -52,6 +52,12 @@ target_link_libraries(h25
 target_include_directories(h25 PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
 )
+
+target_compile_definitions(h25 PRIVATE
+        PICO_DEFAULT_UART=0
+        PICO_DEFAULT_UART_TX_PIN=28
+        PICO_DEFAULT_UART_RX_PIN=29
+        )
 
 pico_add_extra_outputs(h25)
 
