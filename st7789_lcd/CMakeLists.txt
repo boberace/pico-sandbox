@@ -23,7 +23,7 @@ if (EXISTS ${picoVscode})
     include(${picoVscode})
 endif()
 # ====================================================================================
-if (TARGET tinyusb_device)
+# if (TARGET tinyusb_device)
     set(PICO_BOARD pico2 CACHE STRING "Board type")
 
     # Pull in Raspberry Pi Pico SDK (must be before project)
@@ -62,7 +62,8 @@ if (TARGET tinyusb_device)
             pico_stdlib 
             hardware_pio 
             hardware_interp
-            tinyusb_device 
+            hardware_dma
+            # tinyusb_device 
             # tinyusb_board
             )
 
@@ -70,6 +71,6 @@ if (TARGET tinyusb_device)
 
     add_compile_options(-Ofast)
 
-elseif(PICO_ON_DEVICE)
-    message("Skipping hello_usb because TinyUSB submodule is not initialized in the SDK")
-endif()
+# elseif(PICO_ON_DEVICE)
+#     message("Skipping hello_usb because TinyUSB submodule is not initialized in the SDK")
+# endif()

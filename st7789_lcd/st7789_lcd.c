@@ -11,13 +11,15 @@
 #include "hardware/pio.h"
 #include "hardware/gpio.h"
 #include "hardware/interp.h"
-
+#include "hardware/dma.h"
 #include "st7789_lcd.pio.h"
 #include "raspberry_256x256_rgb565.h"
 
 // Tested with the parts that have the height of 240 and 320
 #define SCREEN_WIDTH 240
 #define SCREEN_HEIGHT 240
+#define NUM_PIXEL (SCREEN_WIDTH * SCREEN_HEIGHT)
+#define NUM_COLOUR_BYTES (SCREEN_WIDTH * SCREEN_HEIGHT * 2)
 #define IMAGE_SIZE 256
 #define LOG_IMAGE_SIZE 8
 
@@ -33,6 +35,24 @@
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
+
+#define UNIT_LSB 16
+
+#define PIN_TEST 9
+
+float theta = 0.f;
+float theta_max = 2.f * (float) M_PI;
+
+PIO pio_lcd = pio0;
+uint sm_lcd = 0;
+
+bool colour_ping_pong = 0;
+uint8_t colours_bytes_ping[NUM_COLOUR_BYTES];
+uint8_t * p_colours_bytes_ping = &colours_bytes_ping[0];
+uint8_t colours_bytes_pong[NUM_COLOUR_BYTES];
+uint8_t * p_colours_bytes_pong = &colours_bytes_pong[0];
+
+int dma_chan_colours;
 
 // For optimal use of DMA bandwidth we would use an autopull threshold of 32,
 // but we are using a threshold of 8 here (consume 1 byte from each FIFO entry
@@ -121,13 +141,39 @@ static inline void st7789_start_pixels(PIO pio, uint sm) {
     lcd_set_dc_cs(1, 0);
 }
 
+void setup_lcd_dma()
+{
+    dma_chan_colours = dma_claim_unused_channel(true); 
+
+    dma_channel_config c_colours = dma_channel_get_default_config(dma_chan_colours);
+      
+    channel_config_set_read_increment(&c_colours, true);
+    channel_config_set_write_increment(&c_colours, false);
+    channel_config_set_dreq(&c_colours, DREQ_PIO0_TX0);
+    channel_config_set_transfer_data_size(&c_colours, DMA_SIZE_8);
+    channel_config_set_irq_quiet(&c_colours, false);
+    dma_channel_configure(
+        dma_chan_colours, // channel – DMA channel
+        &c_colours, // config – Pointer to DMA config structure
+        &pio_lcd->txf[sm_lcd], // write_addr – Initial write address - loop channel fills this in
+        NULL, // read_addr – Initial read address 
+        NUM_COLOUR_BYTES, // encoded_transfer_count – The encoded transfer count
+        false // trigger – True to start the transfer immediately
+    );
+
+}
+
 int main() {
     stdio_init_all();
 
-    PIO pio = pio0;
-    uint sm = 0;
-    uint offset = pio_add_program(pio, &st7789_lcd_program);
-    st7789_lcd_program_init(pio, sm, offset, PIN_DIN, PIN_CLK, SERIAL_CLK_DIV);
+    uint offset = pio_add_program(pio_lcd, &st7789_lcd_program);
+    st7789_lcd_program_init(pio_lcd, sm_lcd, offset, PIN_DIN, PIN_CLK, SERIAL_CLK_DIV);
+
+    setup_lcd_dma();
+
+    gpio_init(PIN_TEST);
+    gpio_set_dir(PIN_TEST, GPIO_OUT);
+    
 
     gpio_init(PIN_CS);
     gpio_init(PIN_DC);
@@ -140,7 +186,7 @@ int main() {
 
     gpio_put(PIN_CS, 1);
     // gpio_put(PIN_RESET, 1);
-    lcd_init(pio, sm, st7789_init_seq);
+    lcd_init(pio_lcd, sm_lcd, st7789_init_seq);
     // gpio_put(PIN_BL, 1);
 
     // Other SDKs: static image on screen, lame, boring
@@ -168,14 +214,19 @@ int main() {
     float theta_max = 2.f * (float) M_PI;
     uint32_t prev_millis_display = to_ms_since_boot(get_absolute_time());
     uint32_t curr_millis_display = to_ms_since_boot(get_absolute_time());   
-    int pixel_index = 0;
-    int num_pixel = SCREEN_WIDTH * SCREEN_HEIGHT;
 
+    int counter = 0;
     while (1) {
+        gpio_put(PIN_TEST, 1);
+        printf("main loop waiting %d\n", counter);
+        counter++;
+        
         uint32_t delta_millis_display = curr_millis_display - prev_millis_display;
         prev_millis_display = curr_millis_display;
         curr_millis_display = to_ms_since_boot(get_absolute_time());
         printf("theta %f, milliseconds %d\n",theta, delta_millis_display);
+
+        int pixel_index = 0;
         theta += 0.0025f;
         if (theta > theta_max)
             theta -= theta_max;
@@ -185,16 +236,31 @@ int main() {
         };
         interp0->base[0] = rotate[0];
         interp0->base[1] = rotate[2];
-        st7789_start_pixels(pio, sm);
+        
         for (int y = 0; y < SCREEN_HEIGHT; ++y) {
             interp0->accum[0] = rotate[1] * y;
             interp0->accum[1] = rotate[3] * y;
             for (int x = 0; x < SCREEN_WIDTH; ++x) {
                 uint16_t colour = *(uint16_t *) (interp0->pop[2]);
-                st7789_lcd_put(pio, sm, colour >> 8);
-                st7789_lcd_put(pio, sm, colour & 0xff);
+                pixel_index++;
+                if(colour_ping_pong == 0) {
+                    colours_bytes_ping[(pixel_index -1)*2] = colour >> 8;
+                    colours_bytes_ping[(pixel_index -1)*2 +1] = colour & 0xff;
+                } else {
+                    colours_bytes_pong[(pixel_index -1)*2] = colour >> 8;
+                    colours_bytes_pong[(pixel_index -1)*2 +1] = colour & 0xff;
+                }
             }
         }
+        gpio_put(PIN_TEST, 0);
+        dma_channel_wait_for_finish_blocking(dma_chan_colours);
+        st7789_start_pixels(pio_lcd, sm_lcd);
+        if(colour_ping_pong == 0){
+            dma_channel_set_read_addr(dma_chan_colours, colours_bytes_ping, true);
+        } else {
+            dma_channel_set_read_addr(dma_chan_colours, colours_bytes_pong, true);
+        }   
+        colour_ping_pong = !colour_ping_pong;
     }
 
 }
