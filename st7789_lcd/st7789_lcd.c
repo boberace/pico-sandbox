@@ -38,7 +38,7 @@
 
 #define UNIT_LSB 16
 
-#define PIN_TEST 9
+#define PIN_TEST 22
 
 float theta = 0.f;
 float theta_max = 2.f * (float) M_PI;
@@ -155,8 +155,8 @@ void setup_lcd_dma()
     dma_channel_configure(
         dma_chan_colours, // channel – DMA channel
         &c_colours, // config – Pointer to DMA config structure
-        &pio_lcd->txf[sm_lcd], // write_addr – Initial write address - loop channel fills this in
-        NULL, // read_addr – Initial read address 
+        &pio_lcd->txf[sm_lcd], // write_addr 
+        NULL, // read_addr - will be set later in loop
         NUM_COLOUR_BYTES, // encoded_transfer_count – The encoded transfer count
         false // trigger – True to start the transfer immediately
     );
@@ -218,13 +218,13 @@ int main() {
     int counter = 0;
     while (1) {
         gpio_put(PIN_TEST, 1);
-        printf("main loop waiting %d\n", counter);
-        counter++;
+        // printf("main loop waiting %d\n", counter);
+        // counter++;
         
-        uint32_t delta_millis_display = curr_millis_display - prev_millis_display;
-        prev_millis_display = curr_millis_display;
-        curr_millis_display = to_ms_since_boot(get_absolute_time());
-        printf("theta %f, milliseconds %d\n",theta, delta_millis_display);
+        // uint32_t delta_millis_display = curr_millis_display - prev_millis_display;
+        // prev_millis_display = curr_millis_display;
+        // curr_millis_display = to_ms_since_boot(get_absolute_time());
+        // printf("theta %f, milliseconds %d\n",theta, delta_millis_display);
 
         int pixel_index = 0;
         theta += 0.0025f;
